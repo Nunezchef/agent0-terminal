@@ -1,0 +1,135 @@
+# Agent0 Terminal
+
+> A real PTY-backed terminal modal for Agent Zero with persistent sessions, TUI support, per-chat terminal logs, and one-command installation.
+
+[![Install](https://img.shields.io/badge/install-curl%20%7C%20bash-111827?style=for-the-badge)](https://github.com/Nunezchef/agent0-terminal)
+[![Target](https://img.shields.io/badge/target-Agent%20Zero-2563eb?style=for-the-badge)](https://github.com/frdel/agent-zero)
+[![Terminal](https://img.shields.io/badge/frontend-xterm.js-059669?style=for-the-badge)](https://github.com/xtermjs/xterm.js)
+
+Agent Zero ships with powerful automation, but not a production-grade in-app terminal. `agent0-terminal` adds a real modal terminal window inside the Agent Zero UI so you can run shell commands and advanced TUIs without leaving the app.
+
+## Why This Exists
+
+The goal is simple:
+
+- keep the terminal inside Agent Zero
+- keep the shell persistent until you explicitly restart it
+- keep TUI-compatible behavior for tools like Codex, Claude Code, and Gemini CLI
+- keep installation simple enough that a user can paste one command and get back to work
+
+This repo distributes that feature as a clean add-on instead of a full Agent Zero fork.
+
+## Core Features
+
+- Real modal terminal embedded in the Agent Zero UI
+- PTY-backed Linux shell session
+- Persistent session keyed by chat context and folder
+- Header controls for clear, restart, kill session, and close modal
+- Per-chat terminal logs saved to a dedicated terminal folder
+- Explicit Agent Zero tool for reading terminal logs on demand
+- Local `xterm.js` assets for faster, CDN-free startup
+- Compatibility path for advanced TUIs that depend on `xterm-256color` and resize support
+- Patch-based installer that keeps the add-on auditable
+
+## Install
+
+The canonical install path is one command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Nunezchef/agent0-terminal/main/install.sh | bash
+```
+
+Optional:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Nunezchef/agent0-terminal/main/install.sh | A0_ROOT=/a0 bash
+```
+
+What the installer does:
+
+- detects the Agent Zero root automatically or uses `A0_ROOT`
+- verifies the target looks like a valid Agent Zero checkout
+- creates a rollback patch in `.agent0-terminal/backups/`
+- downloads and applies the add-on patch
+- prints a final hard restart notice
+
+## What Gets Changed In Agent Zero
+
+The patch modifies or adds only the terminal-related pieces:
+
+- chat action button wiring
+- modal terminal UI
+- frontend terminal store
+- websocket terminal session handler
+- PTY helper updates
+- terminal log inspection tool
+- terminal regression tests
+- vendored `xterm.js` assets
+
+## Compatibility
+
+This add-on is designed for the Agent Zero codebase layout used by the current `main` branch when the patch was generated. Read [compatibility.md](docs/compatibility.md) before applying it to a heavily customized checkout.
+
+## Uninstall
+
+If you installed with `install.sh`, a rollback patch is saved under:
+
+```bash
+<agent-zero>/.agent0-terminal/backups/
+```
+
+To reverse the last install manually:
+
+```bash
+git -C /a0 apply -R .agent0-terminal/backups/<timestamp>.patch
+```
+
+If you cloned this repo locally, `uninstall.sh` can reverse a specified backup patch.
+
+## Architecture
+
+The terminal is not a fake command box. It uses:
+
+- `xterm.js` in the browser to render the terminal UI
+- a real backend PTY session in Agent Zero
+- websocket transport for live terminal input and output
+- per-chat log files so the chatbot can inspect terminal history through an explicit tool
+
+This means the modal is a real terminal surface, while the agent still only sees terminal logs when a tool explicitly reads them.
+
+## Credits
+
+- [Agent Zero](https://github.com/frdel/agent-zero) for the base product
+- [xterm.js](https://github.com/xtermjs/xterm.js) for the browser terminal renderer
+- [Context7](https://github.com/upstash/context7) for documentation lookup during implementation
+
+Documentation and repo presentation were informed by strong open-source MCP project patterns:
+
+- [Context7](https://github.com/mcp/io.github.upstash/context7)
+- [TrendRadar](https://github.com/sansan0/TrendRadar)
+- [MindsDB](https://github.com/mindsdb/mindsdb)
+- [GPT Researcher MCP](https://github.com/assafelovic/gptr-mcp)
+- [FastAPI-MCP](https://github.com/tadata-org/fastapi_mcp)
+
+## Contributing
+
+Contributions should keep this repo focused and patch-oriented.
+
+- Validate against a clean Agent Zero checkout before regenerating the patch
+- Keep the patch scoped to terminal behavior only
+- Update [compatibility.md](docs/compatibility.md) when the target Agent Zero baseline changes
+- Update docs when install steps or touched files change
+- Include screenshots or terminal captures for UI-affecting changes
+
+## Maintenance Workflow
+
+For maintainers updating the patch against new Agent Zero versions:
+
+1. Apply or reimplement the terminal integration in a clean Agent Zero worktree.
+2. Export only terminal-related diffs into `patches/agent0-terminal.patch`.
+3. Run the verification commands in [manual-install.md](docs/manual-install.md).
+4. Update compatibility notes and push the refreshed patch.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

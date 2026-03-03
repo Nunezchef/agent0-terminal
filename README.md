@@ -10,6 +10,12 @@
 
 Agent Zero ships with powerful automation, but not a production-grade in-app terminal. `agent0-terminal` adds a real modal terminal window inside the Agent Zero UI so you can run shell commands and advanced TUIs without leaving the app.
 
+## About
+
+`agent0-terminal` is a standalone add-on for [Agent Zero](https://github.com/frdel/agent-zero), not a fork. It patches an existing Agent Zero checkout to add a real PTY-backed terminal modal, persistent shell sessions, and explicit terminal-log integration that fits into the native Agent Zero process stream.
+
+The project is built for people who want serious terminal work inside the existing Agent Zero interface: shell commands, coding TUIs, and log-aware workflows without jumping out to a separate window.
+
 ## Why This Exists
 
 The goal is simple:

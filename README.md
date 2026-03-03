@@ -37,6 +37,7 @@ This repo distributes that feature as a clean add-on instead of a full Agent Zer
 - Explicit Agent Zero tool for reading terminal logs on demand
 - One-click terminal-log insertion from the terminal modal into the native Agent Zero process stream
 - Local `xterm.js` assets for faster, CDN-free startup
+- Terminal theme automatically follows the Agent Zero dark-mode preference
 - Compatibility path for advanced TUIs that depend on `xterm-256color` and resize support
 - Patch-based installer that keeps the add-on auditable
 
@@ -128,6 +129,8 @@ The terminal is not a fake command box. It uses:
 - a terminal-log insert action that adds the log as a native process step in the chat stream
 
 This means the modal is a real terminal surface, and the agent only sees terminal history when the `TerminalLog` tool is explicitly used, either directly or through the terminal modal’s insert action.
+
+The terminal UI also follows the existing Agent Zero theme preference automatically, so when the app switches between dark mode and light mode, the terminal re-themes to match instead of staying visually disconnected from the rest of the interface.
 
 ## Credits
 

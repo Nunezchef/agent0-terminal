@@ -42,6 +42,21 @@ Current workaround:
 - use the terminal as-is for now
 - if possible, use a desktop Chromium-based browser for the smoothest current experience
 
+## Terminal Colors Do Not Match Light Mode
+
+The terminal is designed to follow Agent Zero's dark-mode preference automatically.
+
+If the app is in light mode but the terminal still looks stale:
+
+- close and reopen the terminal modal
+- refresh the browser so the latest frontend assets load
+- confirm the Agent Zero dark-mode preference is actually set the way you expect
+
+Current expected behavior:
+
+- dark mode uses a dark terminal palette
+- light mode uses a light terminal palette
+
 ## Rollback
 
 Use the saved backup patch:

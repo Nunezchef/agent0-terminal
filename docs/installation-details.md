@@ -137,6 +137,7 @@ The current patch touches these files.
 - `python/helpers/shell_local.py`
 - `python/helpers/tty_session.py`
 - `webui/components/chat/input/bottom-actions.html`
+- `webui/components/chat/input/chat-bar.html`
 - `webui/components/chat/input/input-store.js`
 - `webui/css/messages.css`
 
@@ -147,11 +148,24 @@ The current patch touches these files.
 - `python/tools/terminal_log.py`
 - `python/websocket_handlers/terminal_handler.py`
 - `tests/test_inline_chat_terminal.py`
+- `webui/components/chat/input/terminal-store.js`
 - `webui/components/modals/terminal/terminal.html`
 - `webui/components/modals/terminal/terminal-store.js`
 - `webui/vendor/xterm/addon-fit.js`
 - `webui/vendor/xterm/xterm.css`
 - `webui/vendor/xterm/xterm.js`
+
+## Theme Behavior
+
+The terminal modal follows the same Agent Zero dark-mode preference used by the rest of the UI.
+
+That means:
+
+- dark mode keeps the terminal on a dark terminal palette
+- light mode switches the terminal to a light terminal palette
+- changing the Agent Zero preference updates the terminal theme instead of leaving it on a fixed black background
+
+This keeps the modal visually aligned with the current app theme while preserving a terminal-appropriate color palette.
 
 ## What The `TerminalLog` Tool Does
 

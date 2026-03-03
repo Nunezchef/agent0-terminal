@@ -246,6 +246,157 @@ index 7534d93..0a06f38 100644
    async loadKnowledge() {
      try {
        const resp = await shortcuts.callJsonApi("/knowledge_path_get", {
+diff --git a/webui/css/messages.css b/webui/css/messages.css
+index eb918ce..88b6083 100644
+--- a/webui/css/messages.css
++++ b/webui/css/messages.css
+@@ -259,6 +259,139 @@
+   background-color: transparent;
+ }
+ 
++.terminal-inline-container {
++  width: min(100%, 58rem);
++}
++
++.message-inline-terminal {
++  width: 100%;
++  opacity: 0.95;
++}
++
++.message-code-exe .inline-terminal-shell {
++  display: flex;
++  flex-direction: column;
++  gap: 0;
++}
++
++.inline-terminal-header {
++  display: flex;
++  align-items: center;
++  gap: var(--spacing-sm);
++  padding: 8px 12px;
++  border-bottom: 1px solid rgba(48, 54, 61, 0.8);
++  background: linear-gradient(180deg, #21262d 0%, #161b22 100%);
++}
++
++.inline-terminal-title {
++  font-family: var(--font-family-code);
++  font-size: 0.75rem;
++  color: #c9d1d9;
++}
++
++.inline-terminal-status {
++  font-size: 0.7rem;
++  color: #8b949e;
++}
++
++.inline-terminal-actions {
++  margin-left: auto;
++  display: flex;
++  gap: 2px;
++}
++
++.inline-terminal-action {
++  padding: 4px;
++  color: #8b949e;
++  background: transparent;
++}
++
++.inline-terminal-action:hover:not(:disabled) {
++  color: #c9d1d9;
++}
++
++.inline-terminal-output {
++  margin: 0;
++  min-height: 8rem;
++  max-height: 20rem;
++  overflow-y: auto;
++  padding: 12px;
++  font-family: var(--font-family-code);
++  font-size: 0.72rem;
++  line-height: 1.5;
++  color: #c9d1d9;
++  white-space: pre-wrap;
++  word-break: break-word;
++}
++
++.inline-terminal-form {
++  display: flex;
++  align-items: center;
++  gap: var(--spacing-xs);
++  padding: 10px 12px;
++  border-top: 1px solid rgba(48, 54, 61, 0.8);
++  background: rgba(13, 17, 23, 0.95);
++}
++
++.inline-terminal-prompt {
++  color: #7ee787;
++  font-family: var(--font-family-code);
++  font-size: 0.8rem;
++}
++
++.inline-terminal-input {
++  flex: 1;
++  border: none;
++  outline: none;
++  background: transparent;
++  color: #c9d1d9;
++  font-family: var(--font-family-code);
++  font-size: 0.75rem;
++}
++
++.inline-terminal-input::placeholder {
++  color: #6e7681;
++}
++
++.light-mode .inline-terminal-header {
++  background: linear-gradient(180deg, #f6f8fa 0%, #eaeef2 100%);
++  border-bottom-color: #d0d7de;
++}
++
++.light-mode .inline-terminal-title {
++  color: #24292f;
++}
++
++.light-mode .inline-terminal-status,
++.light-mode .inline-terminal-action {
++  color: #57606a;
++}
++
++.light-mode .inline-terminal-output {
++  color: #24292f;
++}
++
++.light-mode .inline-terminal-form {
++  background: rgba(246, 248, 250, 0.98);
++  border-top-color: #d0d7de;
++}
++
++.light-mode .inline-terminal-prompt {
++  color: #1a7f37;
++}
++
++.light-mode .inline-terminal-input {
++  color: #24292f;
++}
++
++.message-inline-terminal-log .inline-terminal-header {
++  border-bottom-style: dashed;
++}
++
++.inline-terminal-log-output {
++  max-height: 18rem;
++}
++
+ .message-util {
+   background-color: transparent;
+   display: none;
+@@ -771,4 +904,4 @@
+   to {
+     opacity: 0;
+   }
+-}
+\ No newline at end of file
++}
 diff --git a/python/api/terminal.py b/python/api/terminal.py
 new file mode 100644
 index 0000000..5630692
@@ -342,12 +493,75 @@ index 0000000..5630692
 +                "output": "",
 +                "error": f"Unsupported terminal action: {action}",
 +            }
+diff --git a/python/api/terminal_log_insert.py b/python/api/terminal_log_insert.py
+new file mode 100644
+index 0000000..0cbfd59
+--- /dev/null
++++ b/python/api/terminal_log_insert.py
+@@ -0,0 +1,57 @@
++from pathlib import Path
++
++from python.helpers.api import ApiHandler, Request
++from python.helpers import files, projects, settings
++from python.tools.terminal_log import TerminalLog
++
++
++class TerminalLogInsert(ApiHandler):
++    def _terminal_dir(self, agent) -> Path:
++        context = agent.context
++        project_name = projects.get_context_project_name(context)
++        if project_name:
++            base = files.normalize_a0_path(projects.get_project_folder(project_name))
++        else:
++            base = settings.get_settings()["workdir_path"]
++        return Path(base) / "terminal" / context.id
++
++    async def process(self, input: dict, request: Request) -> dict:
++        ctxid = str(input.get("ctxid", ""))
++        mode = str(input.get("mode", "tail") or "tail").lower()
++        lines = max(1, int(input.get("lines", 100) or 100))
++        session = str(input.get("session", "") or "")
++
++        context = self.use_context(ctxid)
++        agent = context.agent0
++
++        tool = TerminalLog(agent, "TerminalLog", None, {"mode": mode, "lines": str(lines)}, "", None)
++        result = await tool.execute(mode=mode, lines=lines, session=session)
++        content = str(result.message or "(empty)")
++
++        selected_session = session
++        if not selected_session:
++            logs = sorted(self._terminal_dir(agent).glob("session-*.log"))
++            if logs:
++                selected_session = logs[-1].name
++
++        agent.hist_add_message(False, content={
++            "tool_name": "TerminalLog",
++            "tool_result": (
++                "Terminal history from the current chat terminal session:\n"
++                f"Session: {selected_session or '(latest)'}\n"
++                f"Mode: {mode} ({lines} lines)\n\n"
++                f"{content}"
++            ),
++            "mode": mode,
++            "lines": lines,
++            "session": selected_session,
++        })
++
++        return {
++            "ok": True,
++            "tool": "TerminalLog",
++            "mode": mode,
++            "lines": lines,
++            "session": selected_session,
++            "content": content,
++        }
 diff --git a/python/tools/terminal_log.py b/python/tools/terminal_log.py
 new file mode 100644
-index 0000000..53bd6d6
+index 0000000..2e4377c
 --- /dev/null
 +++ b/python/tools/terminal_log.py
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,114 @@
 +from pathlib import Path
 +
 +from python.helpers import files, projects, settings
@@ -355,6 +569,68 @@ index 0000000..53bd6d6
 +
 +
 +class TerminalLog(Tool):
++    def _condense_output_lines(self, values: list[str]) -> list[str]:
++        filtered: list[str] = []
++
++        for raw in values:
++            text = str(raw or "").strip()
++            if not text:
++                continue
++            if text == "•":
++                continue
++            if text.startswith("•") and text[1:].strip().isdigit():
++                continue
++
++            if filtered:
++                prev = filtered[-1]
++                if text == prev:
++                    continue
++                if text.startswith(prev):
++                    filtered[-1] = text
++                    continue
++                if prev.endswith(text) and len(text) <= max(12, len(prev) // 2):
++                    continue
++
++            filtered.append(text)
++
++        return filtered
++
++    def _render_terminal_log(self, content: str) -> str:
++        rendered: list[str] = []
++        output_buffer: list[str] = []
++
++        def flush_output() -> None:
++            nonlocal output_buffer
++            if not output_buffer:
++                return
++            rendered.extend(self._condense_output_lines(output_buffer))
++            output_buffer = []
++
++        for line in content.splitlines():
++            if line.startswith("[OUTPUT] "):
++                output_buffer.append(line[len("[OUTPUT] ") :])
++                continue
++
++            flush_output()
++
++            if line.startswith("[COMMAND] "):
++                rendered.append(line)
++                continue
++
++            if line.startswith("[SESSION START]"):
++                continue
++            if line.startswith("[SESSION END]"):
++                continue
++            if line.startswith("[VIEWER DETACH]"):
++                continue
++
++            stripped = line.strip()
++            if stripped:
++                rendered.append(stripped)
++
++        flush_output()
++        return "\n".join(rendered)
++
 +    def _terminal_dir(self) -> Path:
 +        context = self.agent.context
 +        project_name = projects.get_context_project_name(context)
@@ -393,6 +669,11 @@ index 0000000..53bd6d6
 +            content = "\n".join(
 +                line for line in content.splitlines() if line.startswith("[COMMAND]")
 +            )
++        else:
++            content = self._render_terminal_log(content)
++
++        if selected_mode == "tail":
++            content = self._render_terminal_log(content)
 +
 +        return Response(message=content or "(empty)", break_loop=False)
 diff --git a/python/websocket_handlers/terminal_handler.py b/python/websocket_handlers/terminal_handler.py
@@ -683,14 +964,15 @@ index 0000000..0c62f9f
 +            handle.write(f"{line}\n")
 diff --git a/tests/test_inline_chat_terminal.py b/tests/test_inline_chat_terminal.py
 new file mode 100644
-index 0000000..2d19a4f
+index 0000000..fa6d267
 --- /dev/null
 +++ b/tests/test_inline_chat_terminal.py
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,353 @@
 +import importlib
 +import importlib.util
 +import sys
 +import threading
++import tempfile
 +import types
 +import unittest
 +from pathlib import Path
@@ -711,6 +993,7 @@ index 0000000..2d19a4f
 +        self.assertIn('id="chat_terminal"', content)
 +        self.assertIn(">Terminal</p>", content)
 +        self.assertIn("$store.chatInput.openTerminal()", content)
++        self.assertNotIn('id="chat_terminal_log"', content)
 +
 +    def test_input_store_opens_terminal_modal(self) -> None:
 +        template_path = PROJECT_ROOT / "webui" / "components" / "chat" / "input" / "input-store.js"
@@ -719,6 +1002,8 @@ index 0000000..2d19a4f
 +            'openModal("modals/terminal/terminal.html")',
 +            content,
 +        )
++        self.assertNotIn('callJsonApi("/terminal_log_insert"', content)
++        self.assertNotIn("appendTerminalLogToChat", content)
 +
 +    def test_terminal_modal_imports_modal_store(self) -> None:
 +        modal_path = PROJECT_ROOT / "webui" / "components" / "modals" / "terminal" / "terminal.html"
@@ -731,7 +1016,9 @@ index 0000000..2d19a4f
 +        self.assertIn('title="Clear terminal"', content)
 +        self.assertIn('title="Restart session"', content)
 +        self.assertIn('title="Kill session"', content)
++        self.assertIn('title="Insert terminal log"', content)
 +        self.assertIn("$store.terminalModal.killSession()", content)
++        self.assertIn("$store.terminalModal.insertTerminalLog()", content)
 +        self.assertNotIn('data-modal-footer', content)
 +
 +    def test_terminal_modal_store_uses_terminal_api(self) -> None:
@@ -755,6 +1042,9 @@ index 0000000..2d19a4f
 +        self.assertIn("this.sendResize()", content)
 +        self.assertIn('"terminal_exit"', content)
 +        self.assertIn("window.closeModal()", content)
++        self.assertIn('callJsonApi("/terminal_log_insert"', content)
++        self.assertIn("drawMessageToolSimple({", content)
++        self.assertIn("Terminal history from the current chat terminal session:", content)
 +        self.assertIn('addEventListener("pointerenter"', content)
 +        self.assertIn('addEventListener("pointerleave"', content)
 +        self.assertIn('addEventListener("touchstart"', content)
@@ -789,6 +1079,16 @@ index 0000000..2d19a4f
 +        content = tool_path.read_text(encoding="utf-8")
 +        self.assertIn("class TerminalLog(Tool):", content)
 +        self.assertIn("terminal", content)
++
++    def test_terminal_log_insert_api_exists(self) -> None:
++        api_path = PROJECT_ROOT / "python" / "api" / "terminal_log_insert.py"
++        content = api_path.read_text(encoding="utf-8")
++        self.assertIn("class TerminalLogInsert(ApiHandler):", content)
++        self.assertIn("TerminalLog(", content)
++        self.assertIn('"tool": "TerminalLog"', content)
++        self.assertIn('"mode": mode', content)
++        self.assertIn('"content": content', content)
++        self.assertIn('agent.hist_add_message(False, content={', content)
 +
 +    def test_terminal_modal_uses_agent_zero_theme_tokens(self) -> None:
 +        modal_path = PROJECT_ROOT / "webui" / "components" / "modals" / "terminal" / "terminal.html"
@@ -919,12 +1219,114 @@ index 0000000..2d19a4f
 +                "reset": True,
 +            },
 +        )
++
++    async def test_terminal_log_condenses_noisy_output_chunks(self) -> None:
++        tool_path = PROJECT_ROOT / "python" / "tools" / "terminal_log.py"
++        files_stub = types.ModuleType("python.helpers.files")
++        projects_stub = types.ModuleType("python.helpers.projects")
++        settings_stub = types.ModuleType("python.helpers.settings")
++        tool_stub = types.ModuleType("python.helpers.tool")
++
++        files_stub.normalize_a0_path = lambda value: value
++        projects_stub.get_context_project_name = lambda context: None
++
++        class FakeResponse:
++            def __init__(self, message, break_loop, additional=None):
++                self.message = message
++                self.break_loop = break_loop
++                self.additional = additional
++
++        class FakeTool:
++            def __init__(self, agent, name, method, args, message, loop_data, **kwargs):
++                self.agent = agent
++
++        settings_root = {}
++        settings_stub.get_settings = lambda: {"workdir_path": settings_root["path"]}
++        tool_stub.Tool = FakeTool
++        tool_stub.Response = FakeResponse
++
++        saved_files = sys.modules.get("python.helpers.files")
++        saved_projects = sys.modules.get("python.helpers.projects")
++        saved_settings = sys.modules.get("python.helpers.settings")
++        saved_tool = sys.modules.get("python.helpers.tool")
++        sys.modules["python.helpers.files"] = files_stub
++        sys.modules["python.helpers.projects"] = projects_stub
++        sys.modules["python.helpers.settings"] = settings_stub
++        sys.modules["python.helpers.tool"] = tool_stub
++
++        try:
++            spec = importlib.util.spec_from_file_location(
++                "test_terminal_log_module",
++                tool_path,
++            )
++            terminal_log_module = importlib.util.module_from_spec(spec)
++            assert spec and spec.loader
++            spec.loader.exec_module(terminal_log_module)
++        finally:
++            if saved_files is None:
++                del sys.modules["python.helpers.files"]
++            else:
++                sys.modules["python.helpers.files"] = saved_files
++            if saved_projects is None:
++                del sys.modules["python.helpers.projects"]
++            else:
++                sys.modules["python.helpers.projects"] = saved_projects
++            if saved_settings is None:
++                del sys.modules["python.helpers.settings"]
++            else:
++                sys.modules["python.helpers.settings"] = saved_settings
++            if saved_tool is None:
++                del sys.modules["python.helpers.tool"]
++            else:
++                sys.modules["python.helpers.tool"] = saved_tool
++
++        with tempfile.TemporaryDirectory() as tmpdir:
++            settings_root["path"] = tmpdir
++            log_dir = Path(tmpdir) / "terminal" / "ctx-1"
++            log_dir.mkdir(parents=True, exist_ok=True)
++            log_path = log_dir / "session-20260303T033955Z.log"
++            log_path.write_text(
++                "\n".join(
++                    [
++                        "[SESSION START] 20260303T033955Z cwd=/a0/usr/workdir",
++                        "[OUTPUT] Workin",
++                        "[OUTPUT] •",
++                        "[OUTPUT] Working",
++                        "[OUTPUT] Working",
++                        "[OUTPUT] orking",
++                        "[OUTPUT] Preparing to invoke skill (4s • esc to interrupt)",
++                        "[OUTPUT] P",
++                        "[OUTPUT] Pr",
++                        '[COMMAND] print("Hello, world!")',
++                        "[OUTPUT] Hello, world!",
++                        "[VIEWER DETACH] reason=client_close",
++                    ]
++                ),
++                encoding="utf-8",
++            )
++
++            tool = terminal_log_module.TerminalLog(
++                SimpleNamespace(context=SimpleNamespace(id="ctx-1")),
++                "TerminalLog",
++                None,
++                {},
++                "",
++                None,
++            )
++            result = await tool.execute(mode="latest")
++
++        self.assertIn("Working", result.message)
++        self.assertIn("Preparing to invoke skill", result.message)
++        self.assertIn('[COMMAND] print("Hello, world!")', result.message)
++        self.assertIn("Hello, world!", result.message)
++        self.assertNotIn("[OUTPUT]", result.message)
++        self.assertNotIn("[VIEWER DETACH]", result.message)
 diff --git a/webui/components/modals/terminal/terminal.html b/webui/components/modals/terminal/terminal.html
 new file mode 100644
-index 0000000..aecae60
+index 0000000..eeedfb7
 --- /dev/null
 +++ b/webui/components/modals/terminal/terminal.html
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,165 @@
 +<html>
 +<head>
 +  <title>Terminal</title>
@@ -972,6 +1374,15 @@ index 0000000..aecae60
 +            @click="$store.terminalModal.killSession()"
 +          >
 +            <span class="material-symbols-outlined">close</span>
++          </button>
++          <button
++            type="button"
++            class="btn-icon-action"
++            title="Insert terminal log"
++            aria-label="Insert terminal log"
++            @click="$store.terminalModal.insertTerminalLog()"
++          >
++            <span class="material-symbols-outlined">article</span>
 +          </button>
 +        </div>
 +      </div>
@@ -1083,11 +1494,13 @@ index 0000000..aecae60
 +</html>
 diff --git a/webui/components/modals/terminal/terminal-store.js b/webui/components/modals/terminal/terminal-store.js
 new file mode 100644
-index 0000000..b8f64a0
+index 0000000..3c9c4dc
 --- /dev/null
 +++ b/webui/components/modals/terminal/terminal-store.js
-@@ -0,0 +1,446 @@
+@@ -0,0 +1,500 @@
 +import { createStore } from "/js/AlpineStore.js";
++import * as shortcuts from "/js/shortcuts.js";
++import { drawMessageToolSimple } from "/js/messages.js";
 +import { getNamespacedClient } from "/js/websocket.js";
 +
 +const XTERM_URL = "/vendor/xterm/xterm.js";
@@ -1527,6 +1940,58 @@ index 0000000..b8f64a0
 +      this.error = error?.message || "Failed to kill terminal session";
 +      if (globalThis.toastFetchError) {
 +        globalThis.toastFetchError("Error killing terminal", error);
++      }
++    }
++  },
++
++  buildTerminalLogContent(payload) {
++    const mode = String(payload?.mode || "tail");
++    const lines = Number(payload?.lines || 0);
++    const session = String(payload?.session || "");
++    const content = String(payload?.content || "(empty)");
++    const details = [
++      "Terminal history from the current chat terminal session:",
++      session ? `Session: ${session}` : "",
++      `Mode: ${mode}${lines ? ` (${lines} lines)` : ""}`,
++      "",
++      content,
++    ].filter(Boolean);
++    return details.join("\n");
++  },
++
++  appendTerminalLogToProcess(payload) {
++    const id = `terminal-log-${Date.now()}`;
++    const content = this.buildTerminalLogContent(payload);
++    drawMessageToolSimple({
++      id,
++      type: "tool",
++      heading: "A0: Using tool 'TerminalLog'",
++      content,
++      kvps: {
++        _tool_name: "TerminalLog",
++        mode: String(payload?.mode || "tail"),
++        lines: String(payload?.lines || ""),
++        session: String(payload?.session || ""),
++      },
++      timestamp: Date.now() / 1000,
++      agentno: 0,
++      code: "LOG",
++    });
++  },
++
++  async insertTerminalLog() {
++    try {
++      const response = await shortcuts.callJsonApi("/terminal_log_insert", {
++        ctxid: this.activeContextId,
++        mode: "tail",
++        lines: 100,
++      });
++      this.appendTerminalLogToProcess(response);
++      this.error = null;
++    } catch (error) {
++      this.error = error?.message || "Failed to insert terminal log";
++      if (globalThis.toastFetchError) {
++        globalThis.toastFetchError("Error inserting terminal log", error);
 +      }
 +    }
 +  },

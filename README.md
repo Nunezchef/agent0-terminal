@@ -6,6 +6,8 @@
 [![Target](https://img.shields.io/badge/target-Agent%20Zero-2563eb?style=for-the-badge)](https://github.com/frdel/agent-zero)
 [![Terminal](https://img.shields.io/badge/frontend-xterm.js-059669?style=for-the-badge)](https://github.com/xtermjs/xterm.js)
 
+![Agent0 Terminal vaporwave hero](docs/assets/hero-vaporwave.svg)
+
 Agent Zero ships with powerful automation, but not a production-grade in-app terminal. `agent0-terminal` adds a real modal terminal window inside the Agent Zero UI so you can run shell commands and advanced TUIs without leaving the app.
 
 ## Why This Exists

@@ -1,0 +1,99 @@
+<svg width="1600" height="720" viewBox="0 0 1600 720" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Agent0 Terminal Vaporwave Hero</title>
+  <desc id="desc">A vaporwave cyber-terminal poster banner for the Agent0 Terminal project.</desc>
+  <defs>
+    <linearGradient id="bg" x1="220" y1="60" x2="1380" y2="660" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#130B2D"/>
+      <stop offset="0.42" stop-color="#2A145E"/>
+      <stop offset="1" stop-color="#0B162E"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="800" y1="180" x2="800" y2="410" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFB7F5"/>
+      <stop offset="1" stop-color="#FF6AD5"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="300" y1="160" x2="1300" y2="580" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E1327"/>
+      <stop offset="1" stop-color="#131B36"/>
+    </linearGradient>
+    <linearGradient id="chrome" x1="320" y1="180" x2="1280" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2CF0FF"/>
+      <stop offset="0.5" stop-color="#9D7BFF"/>
+      <stop offset="1" stop-color="#FF7AE7"/>
+    </linearGradient>
+    <linearGradient id="glowLine" x1="430" y1="0" x2="1170" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2CF0FF"/>
+      <stop offset="0.5" stop-color="#FF7AE7"/>
+      <stop offset="1" stop-color="#FFD56A"/>
+    </linearGradient>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="titleGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="720" fill="url(#bg)"/>
+
+  <g opacity="0.28">
+    <path d="M0 520H1600" stroke="#37E8FF" stroke-width="2"/>
+    <path d="M800 520V720" stroke="#37E8FF" stroke-width="2"/>
+    <path d="M0 720L800 520L1600 720" stroke="#37E8FF" stroke-width="2"/>
+    <path d="M120 720L800 520L1480 720" stroke="#37E8FF" stroke-width="1.5"/>
+    <path d="M240 720L800 520L1360 720" stroke="#37E8FF" stroke-width="1.5"/>
+    <path d="M360 720L800 520L1240 720" stroke="#37E8FF" stroke-width="1.5"/>
+    <path d="M480 720L800 520L1120 720" stroke="#37E8FF" stroke-width="1.5"/>
+    <path d="M600 720L800 520L1000 720" stroke="#37E8FF" stroke-width="1.5"/>
+  </g>
+
+  <g opacity="0.9">
+    <circle cx="1220" cy="180" r="92" fill="#FF72D2" filter="url(#softGlow)"/>
+    <circle cx="1220" cy="180" r="86" fill="url(#sun)"/>
+    <path d="M1148 156H1292" stroke="#FFD1F4" stroke-width="4" opacity="0.55"/>
+    <path d="M1156 182H1284" stroke="#FFD1F4" stroke-width="4" opacity="0.55"/>
+    <path d="M1168 208H1272" stroke="#FFD1F4" stroke-width="4" opacity="0.55"/>
+    <path d="M1184 234H1256" stroke="#FFD1F4" stroke-width="4" opacity="0.55"/>
+  </g>
+
+  <g>
+    <rect x="260" y="150" width="1080" height="430" rx="22" fill="#0B1022" opacity="0.4"/>
+    <rect x="290" y="170" width="1020" height="390" rx="18" fill="url(#panel)" stroke="url(#chrome)" stroke-width="3"/>
+    <rect x="290" y="170" width="1020" height="52" rx="18" fill="#0C1123"/>
+    <path d="M330 196H1270" stroke="url(#chrome)" stroke-width="2" opacity="0.7"/>
+    <circle cx="334" cy="196" r="7" fill="#FF6E9A"/>
+    <circle cx="362" cy="196" r="7" fill="#FFD56A"/>
+    <circle cx="390" cy="196" r="7" fill="#54F7B3"/>
+  </g>
+
+  <g filter="url(#titleGlow)">
+    <text x="380" y="315" fill="#8BF8FF" font-family="monospace" font-size="28" font-weight="700">&gt; launch terminal modal</text>
+    <text x="380" y="382" fill="#FFD7FA" font-family="monospace" font-size="90" font-weight="700" letter-spacing="4">AGENT0</text>
+    <text x="380" y="470" fill="#FF7AE7" font-family="monospace" font-size="96" font-weight="700" letter-spacing="6">TERMINAL</text>
+  </g>
+
+  <g opacity="0.95">
+    <rect x="380" y="505" width="420" height="3" rx="1.5" fill="url(#glowLine)"/>
+    <text x="380" y="540" fill="#C8D4FF" font-family="monospace" font-size="24">persistent PTY  •  TUI-ready  •  inside Agent Zero</text>
+  </g>
+
+  <g opacity="0.85">
+    <text x="930" y="290" fill="#2CF0FF" font-family="monospace" font-size="24">$ Terminal</text>
+    <text x="930" y="328" fill="#C8D4FF" font-family="monospace" font-size="22">[LOG] Terminal history inserted into process stream</text>
+    <text x="930" y="366" fill="#FFB7F5" font-family="monospace" font-size="22">[EXE] codex / claude code / gemini cli</text>
+    <text x="930" y="404" fill="#A9FFCF" font-family="monospace" font-size="22">[CTX] saved per-chat, explicit tool access</text>
+  </g>
+
+  <g opacity="0.24">
+    <rect x="332" y="604" width="936" height="1.5" fill="#2CF0FF"/>
+    <rect x="332" y="628" width="936" height="1.5" fill="#2CF0FF"/>
+    <rect x="332" y="652" width="936" height="1.5" fill="#2CF0FF"/>
+  </g>
+</svg>

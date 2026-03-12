@@ -1,3 +1,162 @@
+diff --git a/python/api/terminal.py b/python/api/terminal.py
+new file mode 100644
+index 0000000..5630692
+--- /dev/null
++++ b/python/api/terminal.py
+@@ -0,0 +1,90 @@
++import shlex
++
++from python.helpers.api import ApiHandler, Request
++from python.tools.code_execution_tool import CodeExecution
++
++
++class Terminal(ApiHandler):
++    EXEC_COUNTER_KEY = "_terminal_exec_counter"
++    SESSION_PATHS_KEY = "_terminal_session_paths"
++
++    async def _run_code_execution(self, agent, args: dict) -> str:
++        tool = CodeExecution(agent, "code_execution_tool", None, args, "", None)
++        tool.log = tool.get_log_object()
++        result = await tool.execute()
++        return result.message
++
++    def _next_execution_session(self, agent, session: int) -> int:
++        counter = int(agent.get_data(self.EXEC_COUNTER_KEY) or 0) + 1
++        agent.set_data(self.EXEC_COUNTER_KEY, counter)
++        return session * 1000 + counter
++
++    async def process(self, input: dict, request: Request) -> dict:
++        ctxid = str(input.get("ctxid", ""))
++        action = str(input.get("action", "command")).strip().lower()
++        session = int(input.get("session", 0))
++        command = str(input.get("command", ""))
++        path = str(input.get("path", "")).strip()
++
++        context = self.use_context(ctxid)
++        agent = context.agent0
++        session_paths = dict(agent.get_data(self.SESSION_PATHS_KEY) or {})
++
++        if action == "command":
++            if path:
++                session_paths[session] = path
++                agent.set_data(self.SESSION_PATHS_KEY, session_paths)
++
++            working_path = session_paths.get(session, "")
++            exec_session = self._next_execution_session(agent, session)
++            exec_command = command
++            if working_path:
++                exec_command = f"cd {shlex.quote(working_path)} && {command}"
++
++            args = {
++                "runtime": "terminal",
++                "session": exec_session,
++                "code": exec_command,
++                "reset": True,
++            }
++            try:
++                output = await self._run_code_execution(agent, args)
++            finally:
++                await self._run_code_execution(
++                    agent,
++                    {
++                        "runtime": "reset",
++                        "session": exec_session,
++                        "reset": True,
++                    },
++                )
++
++            return {
++                "ok": True,
++                "session": session,
++                "action": action,
++                "output": output,
++            }
++        elif action == "output":
++            return {
++                "ok": True,
++                "session": session,
++                "action": action,
++                "output": "",
++            }
++        elif action == "reset":
++            session_paths.pop(session, None)
++            agent.set_data(self.SESSION_PATHS_KEY, session_paths)
++            return {
++                "ok": True,
++                "session": session,
++                "action": action,
++                "output": "",
++            }
++        else:
++            return {
++                "ok": False,
++                "session": session,
++                "output": "",
++                "error": f"Unsupported terminal action: {action}",
++            }
+diff --git a/python/api/terminal_log_insert.py b/python/api/terminal_log_insert.py
+new file mode 100644
+index 0000000..0cbfd59
+--- /dev/null
++++ b/python/api/terminal_log_insert.py
+@@ -0,0 +1,57 @@
++from pathlib import Path
++
++from python.helpers.api import ApiHandler, Request
++from python.helpers import files, projects, settings
++from python.tools.terminal_log import TerminalLog
++
++
++class TerminalLogInsert(ApiHandler):
++    def _terminal_dir(self, agent) -> Path:
++        context = agent.context
++        project_name = projects.get_context_project_name(context)
++        if project_name:
++            base = files.normalize_a0_path(projects.get_project_folder(project_name))
++        else:
++            base = settings.get_settings()["workdir_path"]
++        return Path(base) / "terminal" / context.id
++
++    async def process(self, input: dict, request: Request) -> dict:
++        ctxid = str(input.get("ctxid", ""))
++        mode = str(input.get("mode", "tail") or "tail").lower()
++        lines = max(1, int(input.get("lines", 100) or 100))
++        session = str(input.get("session", "") or "")
++
++        context = self.use_context(ctxid)
++        agent = context.agent0
++
++        tool = TerminalLog(agent, "TerminalLog", None, {"mode": mode, "lines": str(lines)}, "", None)
++        result = await tool.execute(mode=mode, lines=lines, session=session)
++        content = str(result.message or "(empty)")
++
++        selected_session = session
++        if not selected_session:
++            logs = sorted(self._terminal_dir(agent).glob("session-*.log"))
++            if logs:
++                selected_session = logs[-1].name
++
++        agent.hist_add_message(False, content={
++            "tool_name": "TerminalLog",
++            "tool_result": (
++                "Terminal history from the current chat terminal session:\n"
++                f"Session: {selected_session or '(latest)'}\n"
++                f"Mode: {mode} ({lines} lines)\n\n"
++                f"{content}"
++            ),
++            "mode": mode,
++            "lines": lines,
++            "session": selected_session,
++        })
++
++        return {
++            "ok": True,
++            "tool": "TerminalLog",
++            "mode": mode,
++            "lines": lines,
++            "session": selected_session,
++            "content": content,
++        }
 diff --git a/python/helpers/shell_local.py b/python/helpers/shell_local.py
 index dcc1439..abf6164 100644
 --- a/python/helpers/shell_local.py
@@ -176,386 +335,6 @@ index 9e8e7a4..9cd2dc8 100644
      return _Proc()
  
  
-diff --git a/webui/components/chat/input/bottom-actions.html b/webui/components/chat/input/bottom-actions.html
-index 1353fbb..f93356c 100644
---- a/webui/components/chat/input/bottom-actions.html
-+++ b/webui/components/chat/input/bottom-actions.html
-@@ -66,6 +66,11 @@
-             <p>Context</p>
-         </button>
- 
-+        <button class="text-button" id="chat_terminal" @click="$store.chatInput.openTerminal()">
-+            <span class="material-symbols-outlined">terminal</span>
-+            <p>Terminal</p>
-+        </button>
-+
-         <button class="text-button" id="nudges_window" @click="$store.chatInput.nudge()">
-             <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 49 58" fill="currentColor">
-                 <path d="m11.97,16.32c-.46,0-.91-.25-1.15-.68-.9-1.63-1.36-3.34-1.36-5.1C9.45,4.73,14.18,0,20,0s10.55,4.73,10.55,10.55c0,.87-.13,1.75-.41,2.76-.19.7-.9,1.13-1.62.93-.7-.19-1.12-.92-.93-1.62.21-.79.31-1.44.31-2.07,0-4.36-3.55-7.91-7.91-7.91s-7.91,3.55-7.91,7.91c0,1.3.35,2.59,1.03,3.82.36.64.13,1.44-.51,1.79-.21.11-.42.17-.64.17Z" stroke-width="0.5" stroke="currentColor"/>
-@@ -92,4 +97,3 @@
-     </style>
- </body>
- </html>
--
-diff --git a/webui/components/chat/input/input-store.js b/webui/components/chat/input/input-store.js
-index 7534d93..0a06f38 100644
---- a/webui/components/chat/input/input-store.js
-+++ b/webui/components/chat/input/input-store.js
-@@ -1,8 +1,10 @@
- import { createStore } from "/js/AlpineStore.js";
- import * as shortcuts from "/js/shortcuts.js";
-+import { openModal } from "/js/modals.js";
- import { store as fileBrowserStore } from "/components/modals/file-browser/file-browser-store.js";
- import { store as messageQueueStore } from "/components/chat/message-queue/message-queue-store.js";
- import { store as attachmentsStore } from "/components/chat/attachments/attachmentsStore.js";
-+import { store as terminalStore } from "/components/modals/terminal/terminal-store.js";
- import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
- 
- const model = {
-@@ -96,6 +98,33 @@ const model = {
-     }
-   },
- 
-+  async openTerminal() {
-+    try {
-+      if (terminalStore.isModalOpen) return;
-+      let folderPath = "$WORK_DIR";
-+      try {
-+        const resp = await shortcuts.callJsonApi("/chat_files_path_get", {
-+          ctxid: shortcuts.getCurrentContextId(),
-+        });
-+        if (resp?.ok && resp.path) {
-+          folderPath = resp.path;
-+        }
-+      } catch (_e) {
-+        console.warn("Falling back to default terminal workdir");
-+      }
-+
-+      terminalStore.prepare({
-+        ctxid: shortcuts.getCurrentContextId(),
-+        folderPath,
-+      });
-+      await openModal("modals/terminal/terminal.html");
-+    } catch (e) {
-+      if (globalThis.toastFetchError) {
-+        globalThis.toastFetchError("Error opening terminal", e);
-+      }
-+    }
-+  },
-+
-   async loadKnowledge() {
-     try {
-       const resp = await shortcuts.callJsonApi("/knowledge_path_get", {
-diff --git a/webui/css/messages.css b/webui/css/messages.css
-index eb918ce..88b6083 100644
---- a/webui/css/messages.css
-+++ b/webui/css/messages.css
-@@ -259,6 +259,139 @@
-   background-color: transparent;
- }
- 
-+.terminal-inline-container {
-+  width: min(100%, 58rem);
-+}
-+
-+.message-inline-terminal {
-+  width: 100%;
-+  opacity: 0.95;
-+}
-+
-+.message-code-exe .inline-terminal-shell {
-+  display: flex;
-+  flex-direction: column;
-+  gap: 0;
-+}
-+
-+.inline-terminal-header {
-+  display: flex;
-+  align-items: center;
-+  gap: var(--spacing-sm);
-+  padding: 8px 12px;
-+  border-bottom: 1px solid rgba(48, 54, 61, 0.8);
-+  background: linear-gradient(180deg, #21262d 0%, #161b22 100%);
-+}
-+
-+.inline-terminal-title {
-+  font-family: var(--font-family-code);
-+  font-size: 0.75rem;
-+  color: #c9d1d9;
-+}
-+
-+.inline-terminal-status {
-+  font-size: 0.7rem;
-+  color: #8b949e;
-+}
-+
-+.inline-terminal-actions {
-+  margin-left: auto;
-+  display: flex;
-+  gap: 2px;
-+}
-+
-+.inline-terminal-action {
-+  padding: 4px;
-+  color: #8b949e;
-+  background: transparent;
-+}
-+
-+.inline-terminal-action:hover:not(:disabled) {
-+  color: #c9d1d9;
-+}
-+
-+.inline-terminal-output {
-+  margin: 0;
-+  min-height: 8rem;
-+  max-height: 20rem;
-+  overflow-y: auto;
-+  padding: 12px;
-+  font-family: var(--font-family-code);
-+  font-size: 0.72rem;
-+  line-height: 1.5;
-+  color: #c9d1d9;
-+  white-space: pre-wrap;
-+  word-break: break-word;
-+}
-+
-+.inline-terminal-form {
-+  display: flex;
-+  align-items: center;
-+  gap: var(--spacing-xs);
-+  padding: 10px 12px;
-+  border-top: 1px solid rgba(48, 54, 61, 0.8);
-+  background: rgba(13, 17, 23, 0.95);
-+}
-+
-+.inline-terminal-prompt {
-+  color: #7ee787;
-+  font-family: var(--font-family-code);
-+  font-size: 0.8rem;
-+}
-+
-+.inline-terminal-input {
-+  flex: 1;
-+  border: none;
-+  outline: none;
-+  background: transparent;
-+  color: #c9d1d9;
-+  font-family: var(--font-family-code);
-+  font-size: 0.75rem;
-+}
-+
-+.inline-terminal-input::placeholder {
-+  color: #6e7681;
-+}
-+
-+.light-mode .inline-terminal-header {
-+  background: linear-gradient(180deg, #f6f8fa 0%, #eaeef2 100%);
-+  border-bottom-color: #d0d7de;
-+}
-+
-+.light-mode .inline-terminal-title {
-+  color: #24292f;
-+}
-+
-+.light-mode .inline-terminal-status,
-+.light-mode .inline-terminal-action {
-+  color: #57606a;
-+}
-+
-+.light-mode .inline-terminal-output {
-+  color: #24292f;
-+}
-+
-+.light-mode .inline-terminal-form {
-+  background: rgba(246, 248, 250, 0.98);
-+  border-top-color: #d0d7de;
-+}
-+
-+.light-mode .inline-terminal-prompt {
-+  color: #1a7f37;
-+}
-+
-+.light-mode .inline-terminal-input {
-+  color: #24292f;
-+}
-+
-+.message-inline-terminal-log .inline-terminal-header {
-+  border-bottom-style: dashed;
-+}
-+
-+.inline-terminal-log-output {
-+  max-height: 18rem;
-+}
-+
- .message-util {
-   background-color: transparent;
-   display: none;
-@@ -771,4 +904,4 @@
-   to {
-     opacity: 0;
-   }
--}
-\ No newline at end of file
-+}
-diff --git a/python/api/terminal.py b/python/api/terminal.py
-new file mode 100644
-index 0000000..5630692
---- /dev/null
-+++ b/python/api/terminal.py
-@@ -0,0 +1,90 @@
-+import shlex
-+
-+from python.helpers.api import ApiHandler, Request
-+from python.tools.code_execution_tool import CodeExecution
-+
-+
-+class Terminal(ApiHandler):
-+    EXEC_COUNTER_KEY = "_terminal_exec_counter"
-+    SESSION_PATHS_KEY = "_terminal_session_paths"
-+
-+    async def _run_code_execution(self, agent, args: dict) -> str:
-+        tool = CodeExecution(agent, "code_execution_tool", None, args, "", None)
-+        tool.log = tool.get_log_object()
-+        result = await tool.execute()
-+        return result.message
-+
-+    def _next_execution_session(self, agent, session: int) -> int:
-+        counter = int(agent.get_data(self.EXEC_COUNTER_KEY) or 0) + 1
-+        agent.set_data(self.EXEC_COUNTER_KEY, counter)
-+        return session * 1000 + counter
-+
-+    async def process(self, input: dict, request: Request) -> dict:
-+        ctxid = str(input.get("ctxid", ""))
-+        action = str(input.get("action", "command")).strip().lower()
-+        session = int(input.get("session", 0))
-+        command = str(input.get("command", ""))
-+        path = str(input.get("path", "")).strip()
-+
-+        context = self.use_context(ctxid)
-+        agent = context.agent0
-+        session_paths = dict(agent.get_data(self.SESSION_PATHS_KEY) or {})
-+
-+        if action == "command":
-+            if path:
-+                session_paths[session] = path
-+                agent.set_data(self.SESSION_PATHS_KEY, session_paths)
-+
-+            working_path = session_paths.get(session, "")
-+            exec_session = self._next_execution_session(agent, session)
-+            exec_command = command
-+            if working_path:
-+                exec_command = f"cd {shlex.quote(working_path)} && {command}"
-+
-+            args = {
-+                "runtime": "terminal",
-+                "session": exec_session,
-+                "code": exec_command,
-+                "reset": True,
-+            }
-+            try:
-+                output = await self._run_code_execution(agent, args)
-+            finally:
-+                await self._run_code_execution(
-+                    agent,
-+                    {
-+                        "runtime": "reset",
-+                        "session": exec_session,
-+                        "reset": True,
-+                    },
-+                )
-+
-+            return {
-+                "ok": True,
-+                "session": session,
-+                "action": action,
-+                "output": output,
-+            }
-+        elif action == "output":
-+            return {
-+                "ok": True,
-+                "session": session,
-+                "action": action,
-+                "output": "",
-+            }
-+        elif action == "reset":
-+            session_paths.pop(session, None)
-+            agent.set_data(self.SESSION_PATHS_KEY, session_paths)
-+            return {
-+                "ok": True,
-+                "session": session,
-+                "action": action,
-+                "output": "",
-+            }
-+        else:
-+            return {
-+                "ok": False,
-+                "session": session,
-+                "output": "",
-+                "error": f"Unsupported terminal action: {action}",
-+            }
-diff --git a/python/api/terminal_log_insert.py b/python/api/terminal_log_insert.py
-new file mode 100644
-index 0000000..0cbfd59
---- /dev/null
-+++ b/python/api/terminal_log_insert.py
-@@ -0,0 +1,57 @@
-+from pathlib import Path
-+
-+from python.helpers.api import ApiHandler, Request
-+from python.helpers import files, projects, settings
-+from python.tools.terminal_log import TerminalLog
-+
-+
-+class TerminalLogInsert(ApiHandler):
-+    def _terminal_dir(self, agent) -> Path:
-+        context = agent.context
-+        project_name = projects.get_context_project_name(context)
-+        if project_name:
-+            base = files.normalize_a0_path(projects.get_project_folder(project_name))
-+        else:
-+            base = settings.get_settings()["workdir_path"]
-+        return Path(base) / "terminal" / context.id
-+
-+    async def process(self, input: dict, request: Request) -> dict:
-+        ctxid = str(input.get("ctxid", ""))
-+        mode = str(input.get("mode", "tail") or "tail").lower()
-+        lines = max(1, int(input.get("lines", 100) or 100))
-+        session = str(input.get("session", "") or "")
-+
-+        context = self.use_context(ctxid)
-+        agent = context.agent0
-+
-+        tool = TerminalLog(agent, "TerminalLog", None, {"mode": mode, "lines": str(lines)}, "", None)
-+        result = await tool.execute(mode=mode, lines=lines, session=session)
-+        content = str(result.message or "(empty)")
-+
-+        selected_session = session
-+        if not selected_session:
-+            logs = sorted(self._terminal_dir(agent).glob("session-*.log"))
-+            if logs:
-+                selected_session = logs[-1].name
-+
-+        agent.hist_add_message(False, content={
-+            "tool_name": "TerminalLog",
-+            "tool_result": (
-+                "Terminal history from the current chat terminal session:\n"
-+                f"Session: {selected_session or '(latest)'}\n"
-+                f"Mode: {mode} ({lines} lines)\n\n"
-+                f"{content}"
-+            ),
-+            "mode": mode,
-+            "lines": lines,
-+            "session": selected_session,
-+        })
-+
-+        return {
-+            "ok": True,
-+            "tool": "TerminalLog",
-+            "mode": mode,
-+            "lines": lines,
-+            "session": selected_session,
-+            "content": content,
-+        }
 diff --git a/python/tools/terminal_log.py b/python/tools/terminal_log.py
 new file mode 100644
 index 0000000..2e4377c
@@ -964,10 +743,10 @@ index 0000000..0c62f9f
 +            handle.write(f"{line}\n")
 diff --git a/tests/test_inline_chat_terminal.py b/tests/test_inline_chat_terminal.py
 new file mode 100644
-index 0000000..fa6d267
+index 0000000..84dbd82
 --- /dev/null
 +++ b/tests/test_inline_chat_terminal.py
-@@ -0,0 +1,353 @@
+@@ -0,0 +1,362 @@
 +import importlib
 +import importlib.util
 +import sys
@@ -1055,6 +834,11 @@ index 0000000..fa6d267
 +        self.assertIn("navigator.clipboard.writeText", content)
 +        self.assertIn("navigator.clipboard.readText", content)
 +        self.assertIn("this.terminal.selectAll()", content)
++        self.assertIn('window.localStorage?.getItem("darkMode")', content)
++        self.assertIn("new MutationObserver", content)
++        self.assertIn("applyTerminalTheme()", content)
++        self.assertIn("brightGreen", content)
++        self.assertIn("brightBlue", content)
 +
 +    def test_terminal_websocket_handler_exists(self) -> None:
 +        handler_path = PROJECT_ROOT / "python" / "websocket_handlers" / "terminal_handler.py"
@@ -1096,6 +880,10 @@ index 0000000..fa6d267
 +        self.assertIn("var(--color-background)", content)
 +        self.assertIn("var(--color-border)", content)
 +        self.assertIn("var(--color-primary)", content)
++        self.assertIn("--terminal-bg", content)
++        self.assertIn("--terminal-fg", content)
++        self.assertIn(".terminal-xterm .xterm-viewport", content)
++        self.assertIn("background-color: var(--terminal-bg) !important;", content)
 +        self.assertIn("overscroll-behavior: contain;", content)
 +        self.assertIn('/vendor/xterm/xterm.css', content)
 +        self.assertNotIn("background: #0d1117;", content)
@@ -1321,183 +1109,320 @@ index 0000000..fa6d267
 +        self.assertIn("Hello, world!", result.message)
 +        self.assertNotIn("[OUTPUT]", result.message)
 +        self.assertNotIn("[VIEWER DETACH]", result.message)
-diff --git a/webui/components/modals/terminal/terminal.html b/webui/components/modals/terminal/terminal.html
+diff --git a/webui/components/chat/input/bottom-actions.html b/webui/components/chat/input/bottom-actions.html
+index 1353fbb..f93356c 100644
+--- a/webui/components/chat/input/bottom-actions.html
++++ b/webui/components/chat/input/bottom-actions.html
+@@ -66,6 +66,11 @@
+             <p>Context</p>
+         </button>
+ 
++        <button class="text-button" id="chat_terminal" @click="$store.chatInput.openTerminal()">
++            <span class="material-symbols-outlined">terminal</span>
++            <p>Terminal</p>
++        </button>
++
+         <button class="text-button" id="nudges_window" @click="$store.chatInput.nudge()">
+             <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 49 58" fill="currentColor">
+                 <path d="m11.97,16.32c-.46,0-.91-.25-1.15-.68-.9-1.63-1.36-3.34-1.36-5.1C9.45,4.73,14.18,0,20,0s10.55,4.73,10.55,10.55c0,.87-.13,1.75-.41,2.76-.19.7-.9,1.13-1.62.93-.7-.19-1.12-.92-.93-1.62.21-.79.31-1.44.31-2.07,0-4.36-3.55-7.91-7.91-7.91s-7.91,3.55-7.91,7.91c0,1.3.35,2.59,1.03,3.82.36.64.13,1.44-.51,1.79-.21.11-.42.17-.64.17Z" stroke-width="0.5" stroke="currentColor"/>
+@@ -92,4 +97,3 @@
+     </style>
+ </body>
+ </html>
+-
+diff --git a/webui/components/chat/input/chat-bar.html b/webui/components/chat/input/chat-bar.html
+index 9ab9a96..b39665d 100644
+--- a/webui/components/chat/input/chat-bar.html
++++ b/webui/components/chat/input/chat-bar.html
+@@ -2,6 +2,7 @@
+ <head>
+     <script type="module">
+         import { store } from "/components/chat/input/input-store.js";
++        import { store as terminalStore } from "/components/chat/input/terminal-store.js";
+         import { store as messageQueueStore } from "/components/chat/message-queue/message-queue-store.js";
+     </script>
+ </head>
+@@ -46,4 +47,3 @@
+     </style>
+ </body>
+ </html>
+-
+diff --git a/webui/components/chat/input/input-store.js b/webui/components/chat/input/input-store.js
+index 7534d93..0a06f38 100644
+--- a/webui/components/chat/input/input-store.js
++++ b/webui/components/chat/input/input-store.js
+@@ -1,8 +1,10 @@
+ import { createStore } from "/js/AlpineStore.js";
+ import * as shortcuts from "/js/shortcuts.js";
++import { openModal } from "/js/modals.js";
+ import { store as fileBrowserStore } from "/components/modals/file-browser/file-browser-store.js";
+ import { store as messageQueueStore } from "/components/chat/message-queue/message-queue-store.js";
+ import { store as attachmentsStore } from "/components/chat/attachments/attachmentsStore.js";
++import { store as terminalStore } from "/components/modals/terminal/terminal-store.js";
+ import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
+ 
+ const model = {
+@@ -96,6 +98,33 @@ const model = {
+     }
+   },
+ 
++  async openTerminal() {
++    try {
++      if (terminalStore.isModalOpen) return;
++      let folderPath = "$WORK_DIR";
++      try {
++        const resp = await shortcuts.callJsonApi("/chat_files_path_get", {
++          ctxid: shortcuts.getCurrentContextId(),
++        });
++        if (resp?.ok && resp.path) {
++          folderPath = resp.path;
++        }
++      } catch (_e) {
++        console.warn("Falling back to default terminal workdir");
++      }
++
++      terminalStore.prepare({
++        ctxid: shortcuts.getCurrentContextId(),
++        folderPath,
++      });
++      await openModal("modals/terminal/terminal.html");
++    } catch (e) {
++      if (globalThis.toastFetchError) {
++        globalThis.toastFetchError("Error opening terminal", e);
++      }
++    }
++  },
++
+   async loadKnowledge() {
+     try {
+       const resp = await shortcuts.callJsonApi("/knowledge_path_get", {
+diff --git a/webui/components/chat/input/terminal-store.js b/webui/components/chat/input/terminal-store.js
 new file mode 100644
-index 0000000..eeedfb7
+index 0000000..06f2526
 --- /dev/null
-+++ b/webui/components/modals/terminal/terminal.html
-@@ -0,0 +1,165 @@
-+<html>
-+<head>
-+  <title>Terminal</title>
-+  <script type="module">
-+    import { store as terminalStore } from "/components/modals/terminal/terminal-store.js";
-+  </script>
-+</head>
-+<body>
-+  <div
-+    class="terminal-modal"
-+    x-data
-+    x-init="$store.terminalModal.attach()"
-+    x-destroy="$store.terminalModal.detach()"
-+  >
-+    <div class="terminal-shell">
-+      <div class="terminal-meta">
-+        <div class="terminal-meta-text">
-+          <span class="terminal-folder" x-text="$store.terminalModal.activeFolderPath || '$WORK_DIR'"></span>
-+          <span class="terminal-log" x-text="$store.terminalModal.logPath || 'Starting terminal…'"></span>
-+        </div>
-+        <div class="terminal-actions">
-+          <button
-+            type="button"
-+            class="btn-icon-action"
-+            title="Clear terminal"
-+            aria-label="Clear terminal"
-+            @click="$store.terminalModal.clearOutput()"
-+          >
-+            <span class="material-symbols-outlined">ink_eraser</span>
-+          </button>
-+          <button
-+            type="button"
-+            class="btn-icon-action"
-+            title="Restart session"
-+            aria-label="Restart session"
-+            @click="$store.terminalModal.resetSession()"
-+          >
-+            <span class="material-symbols-outlined">refresh</span>
-+          </button>
-+          <button
-+            type="button"
-+            class="btn-icon-action"
-+            title="Kill session"
-+            aria-label="Kill session"
-+            @click="$store.terminalModal.killSession()"
-+          >
-+            <span class="material-symbols-outlined">close</span>
-+          </button>
-+          <button
-+            type="button"
-+            class="btn-icon-action"
-+            title="Insert terminal log"
-+            aria-label="Insert terminal log"
-+            @click="$store.terminalModal.insertTerminalLog()"
-+          >
-+            <span class="material-symbols-outlined">article</span>
-+          </button>
-+        </div>
-+      </div>
-+      <p class="terminal-error" x-show="$store.terminalModal.error" x-text="$store.terminalModal.error"></p>
-+      <div id="terminal-xterm" class="terminal-xterm"></div>
-+    </div>
-+  </div>
++++ b/webui/components/chat/input/terminal-store.js
+@@ -0,0 +1,215 @@
++import { createStore } from "/js/AlpineStore.js";
++import * as shortcuts from "/js/shortcuts.js";
 +
-+  <style>
-+    @import url("/vendor/xterm/xterm.css");
++function el(tag, className = "", text = "") {
++  const node = document.createElement(tag);
++  if (className) node.className = className;
++  if (text) node.textContent = text;
++  return node;
++}
 +
-+    .terminal-modal {
-+      display: flex;
-+      flex-direction: column;
-+      height: min(72vh, 52rem);
-+      min-height: 28rem;
-+      max-height: 72vh;
-+      overscroll-behavior: contain;
++const model = {
++  nextSession: 9000,
++  sessions: {},
++  terminals: {},
++
++  getContextId() {
++    return globalThis.getContext?.() || shortcuts.getCurrentContextId?.() || "";
++  },
++
++  getSessionId(ctxid) {
++    if (!this.sessions[ctxid]) {
++      this.sessions[ctxid] = this.nextSession;
++      this.nextSession += 1;
++    }
++    return this.sessions[ctxid];
++  },
++
++  ensureCard(ctxid) {
++    const existing = this.terminals[ctxid];
++    if (existing && existing.group?.isConnected) {
++      return existing;
 +    }
 +
-+    .terminal-shell {
-+      display: flex;
-+      flex-direction: column;
-+      height: 100%;
-+      min-height: 0;
-+      background: var(--color-background);
-+      border: 1px solid var(--color-border);
-+      border-radius: 8px;
-+      overflow: hidden;
-+      overscroll-behavior: contain;
++    const session = this.getSessionId(ctxid);
++    const history = document.querySelector("#chat-history");
++    if (!history) {
++      throw new Error("Chat history not available");
 +    }
 +
-+    .terminal-meta {
-+      display: flex;
-+      align-items: center;
-+      justify-content: space-between;
-+      gap: 1rem;
-+      padding: 0.75rem 1rem;
-+      border-bottom: 1px solid var(--color-border);
-+      background: var(--color-background);
-+      color: var(--color-text);
-+      font-family: var(--font-family-code);
-+      font-size: 0.75rem;
++    const group = el("div", "message-group message-group-left");
++    const container = el(
++      "div",
++      "message-container ai-container terminal-inline-container",
++    );
++    const message = el("div", "message message-code-exe message-inline-terminal");
++    const body = el("div", "message-body inline-terminal-shell");
++    const header = el("div", "inline-terminal-header");
++    const title = el("div", "inline-terminal-title", `Terminal [${session}]`);
++    const status = el("div", "inline-terminal-status", "Idle");
++    const actions = el("div", "inline-terminal-actions");
++    const clearButton = el("button", "btn-icon-action inline-terminal-action");
++    const resetButton = el("button", "btn-icon-action inline-terminal-action");
++    const closeButton = el("button", "btn-icon-action inline-terminal-action");
++    const output = el("pre", "inline-terminal-output");
++    const form = el("form", "inline-terminal-form");
++    const prompt = el("span", "inline-terminal-prompt", "$");
++    const input = document.createElement("input");
++
++    clearButton.type = "button";
++    clearButton.title = "Clear output";
++    clearButton.innerHTML = '<span class="material-symbols-outlined">ink_eraser</span>';
++
++    resetButton.type = "button";
++    resetButton.title = "Reset session";
++    resetButton.innerHTML = '<span class="material-symbols-outlined">restart_alt</span>';
++
++    closeButton.type = "button";
++    closeButton.title = "Close terminal";
++    closeButton.innerHTML = '<span class="material-symbols-outlined">close</span>';
++
++    input.type = "text";
++    input.className = "inline-terminal-input";
++    input.placeholder = "Run a bash command";
++    input.autocomplete = "off";
++    input.spellcheck = false;
++
++    actions.append(clearButton, resetButton, closeButton);
++    header.append(title, status, actions);
++    form.append(prompt, input);
++    body.append(header, output, form);
++    message.appendChild(body);
++    container.appendChild(message);
++    group.appendChild(container);
++    history.appendChild(group);
++
++    const refs = {
++      ctxid,
++      session,
++      group,
++      status,
++      output,
++      form,
++      input,
++      clearButton,
++      resetButton,
++      closeButton,
++      running: false,
++    };
++
++    clearButton.addEventListener("click", () => {
++      refs.output.textContent = "";
++      this.appendOutput(ctxid, "Output cleared.");
++    });
++    closeButton.addEventListener("click", () => this.close(ctxid));
++    resetButton.addEventListener("click", async () => {
++      await this.reset(ctxid);
++    });
++    form.addEventListener("submit", async (event) => {
++      event.preventDefault();
++      await this.runCommand(ctxid, refs.input.value);
++    });
++
++    this.terminals[ctxid] = refs;
++    this.appendOutput(ctxid, `Connected to shell session ${session}.`);
++    return refs;
++  },
++
++  focus(ctxid) {
++    const refs = this.ensureCard(ctxid);
++    refs.group.scrollIntoView({ behavior: "smooth", block: "end" });
++    refs.input.focus();
++    return refs;
++  },
++
++  async open() {
++    const ctxid = this.getContextId();
++    if (!ctxid) {
++      throw new Error("No active chat context");
 +    }
 +
-+    .terminal-meta-text {
-+      display: flex;
-+      flex-direction: column;
-+      min-width: 0;
-+      gap: 0.25rem;
-+      flex: 1;
++    const refs = this.focus(ctxid);
++    if (!refs.running && refs.output.textContent.trim().length === 0) {
++      this.appendOutput(ctxid, `Connected to shell session ${refs.session}.`);
++    }
++  },
++
++  setRunning(refs, running, label = "") {
++    refs.running = running;
++    refs.input.disabled = running;
++    refs.resetButton.disabled = running;
++    refs.status.textContent = running ? label || "Running..." : "Idle";
++  },
++
++  appendOutput(ctxid, text) {
++    if (!text) return;
++    const refs = this.ensureCard(ctxid);
++    const normalized = refs.output.textContent ? `\n${text}` : text;
++    refs.output.textContent += normalized;
++    refs.output.scrollTop = refs.output.scrollHeight;
++  },
++
++  async runCommand(ctxid, rawCommand) {
++    const command = String(rawCommand || "").trim();
++    const refs = this.ensureCard(ctxid);
++    if (!command || refs.running) {
++      return;
 +    }
 +
-+    .terminal-folder {
-+      color: var(--color-primary);
-+      font-weight: 600;
++    refs.input.value = "";
++    this.setRunning(refs, true, `Running: ${command}`);
++
++    try {
++      const response = await shortcuts.callJsonApi("/terminal", {
++        ctxid,
++        session: refs.session,
++        action: "command",
++        command,
++      });
++      this.appendOutput(ctxid, response.output || "(no output)");
++    } catch (error) {
++      this.appendOutput(ctxid, `Error: ${error.message || error}`);
++      if (globalThis.toastFetchError) {
++        globalThis.toastFetchError("Error running terminal command", error);
++      }
++    } finally {
++      this.setRunning(refs, false);
++      refs.input.focus();
++    }
++  },
++
++  async reset(ctxid) {
++    const refs = this.ensureCard(ctxid);
++    if (refs.running) {
++      return;
 +    }
 +
-+    .terminal-xterm {
-+      flex: 1;
-+      min-height: 0;
-+      padding: 0;
-+      background: var(--color-panel);
-+      overflow: hidden;
-+      overscroll-behavior: contain;
++    this.setRunning(refs, true, "Resetting...");
++    try {
++      await shortcuts.callJsonApi("/terminal", {
++        ctxid,
++        session: refs.session,
++        action: "reset",
++      });
++      refs.output.textContent = "";
++      this.appendOutput(ctxid, `Session ${refs.session} reset.`);
++    } catch (error) {
++      this.appendOutput(ctxid, `Reset failed: ${error.message || error}`);
++      if (globalThis.toastFetchError) {
++        globalThis.toastFetchError("Error resetting terminal session", error);
++      }
++    } finally {
++      this.setRunning(refs, false);
++      refs.input.focus();
 +    }
++  },
 +
-+    .terminal-xterm .xterm {
-+      height: 100%;
-+      padding: 0.75rem;
-+    }
++  close(ctxid) {
++    const refs = this.terminals[ctxid];
++    if (!refs) return;
++    refs.group.remove();
++    delete this.terminals[ctxid];
++  },
++};
 +
-+    .terminal-xterm :is(.xterm-viewport, .xterm-screen) {
-+      height: 100% !important;
-+      border-radius: 4px;
-+    }
-+
-+    .terminal-xterm .xterm-viewport {
-+      overflow-y: auto !important;
-+      overscroll-behavior: contain;
-+    }
-+
-+    .terminal-error {
-+      margin: 0;
-+      padding: 0.5rem 1rem;
-+      color: var(--color-accent);
-+      border-bottom: 1px solid var(--color-border);
-+      background: var(--color-background-hover, var(--color-background));
-+    }
-+
-+    .terminal-log {
-+      overflow: hidden;
-+      text-overflow: ellipsis;
-+      white-space: nowrap;
-+      color: var(--color-text-secondary, var(--color-text));
-+    }
-+
-+    .terminal-actions {
-+      display: flex;
-+      align-items: center;
-+      gap: 0.375rem;
-+    }
-+
-+    .terminal-actions .material-symbols-outlined {
-+      font-size: 1rem;
-+    }
-+  </style>
-+</body>
-+</html>
++export const store = createStore("chatTerminal", model);
 diff --git a/webui/components/modals/terminal/terminal-store.js b/webui/components/modals/terminal/terminal-store.js
 new file mode 100644
-index 0000000..3c9c4dc
+index 0000000..b87f55c
 --- /dev/null
 +++ b/webui/components/modals/terminal/terminal-store.js
-@@ -0,0 +1,500 @@
+@@ -0,0 +1,557 @@
 +import { createStore } from "/js/AlpineStore.js";
 +import * as shortcuts from "/js/shortcuts.js";
 +import { drawMessageToolSimple } from "/js/messages.js";
@@ -1516,6 +1441,7 @@ index 0000000..3c9c4dc
 +  error: null,
 +  terminal: null,
 +  fitAddon: null,
++  themeObserver: null,
 +  resizeObserver: null,
 +  socketClient: null,
 +  outputHandler: null,
@@ -1583,6 +1509,10 @@ index 0000000..3c9c4dc
 +      this.resizeObserver.disconnect();
 +      this.resizeObserver = null;
 +    }
++    if (this.themeObserver) {
++      this.themeObserver.disconnect();
++      this.themeObserver = null;
++    }
 +    if (this.resizeTimer) {
 +      clearTimeout(this.resizeTimer);
 +      this.resizeTimer = null;
@@ -1619,8 +1549,6 @@ index 0000000..3c9c4dc
 +        xtermModulePromise,
 +        fitAddonModulePromise,
 +      ]);
-+      const theme = this.getTerminalTheme();
-+
 +      const term = new Terminal({
 +        cursorBlink: true,
 +        cursorStyle: "block",
@@ -1629,7 +1557,7 @@ index 0000000..3c9c4dc
 +        fontSize: 13,
 +        convertEol: false,
 +        scrollback: 2000,
-+        theme,
++        theme: this.getTerminalTheme(),
 +      });
 +      const fitAddon = new FitAddon();
 +      term.loadAddon(fitAddon);
@@ -1665,6 +1593,8 @@ index 0000000..3c9c4dc
 +        }
 +      });
 +      this.resizeObserver.observe(container);
++      this.applyTerminalTheme();
++      this.installThemeObserver();
 +      this.focusTerminal();
 +    })();
 +
@@ -1878,24 +1808,76 @@ index 0000000..3c9c4dc
 +    }, 40);
 +  },
 +
-+  readCssVar(name, fallback) {
-+    const value = globalThis.getComputedStyle?.(document.documentElement)
++  installThemeObserver() {
++    if (this.themeObserver || typeof MutationObserver === "undefined") return;
++    const body = document.body;
++    if (!body) return;
++    this.themeObserver = new MutationObserver(() => {
++      this.applyTerminalTheme();
++    });
++    this.themeObserver.observe(body, {
++      attributes: true,
++      attributeFilter: ["class"],
++    });
++  },
++
++  applyTerminalTheme() {
++    if (!this.terminal) return;
++    this.terminal.options.theme = this.getTerminalTheme();
++  },
++
++  readCssVar(name, fallback, element = document.documentElement) {
++    const value = globalThis.getComputedStyle?.(element)
 +      ?.getPropertyValue(name)
 +      ?.trim();
 +    return value || fallback;
 +  },
 +
++  getThemeHost() {
++    return document.querySelector(".terminal-modal") || document.documentElement;
++  },
++
++  isDarkModeEnabled() {
++    const stored = window.localStorage?.getItem("darkMode");
++    if (stored === "false") return false;
++    if (document.body?.classList.contains("light-mode")) return false;
++    if (document.body?.classList.contains("dark-mode")) return true;
++    return true;
++  },
++
 +  getTerminalTheme() {
-+    const background = this.readCssVar("--color-background", "#101418");
-+    const panel = this.readCssVar("--color-panel", background);
-+    const foreground = this.readCssVar("--color-text", "#e6edf3");
-+    const primary = this.readCssVar("--color-primary", "#7cc7ff");
++    const isDark = this.isDarkModeEnabled();
++    const host = this.getThemeHost();
++    const panel = this.readCssVar("--terminal-bg", isDark ? "#101418" : "#f8fafc", host);
++    const foreground = this.readCssVar("--terminal-fg", isDark ? "#e6edf3" : "#0f172a", host);
++    const primary = this.readCssVar("--terminal-cursor", isDark ? "#7cc7ff" : "#2563eb", host);
++    const selectionBackground = this.readCssVar(
++      "--terminal-selection",
++      isDark ? "#7cc7ff33" : "#2563eb22",
++      host,
++    );
 +    return {
 +      background: panel,
 +      foreground,
 +      cursor: primary,
-+      cursorAccent: background,
-+      selectionBackground: `${primary}33`,
++      cursorAccent: panel,
++      selectionBackground,
++      black: isDark ? "#111827" : "#1f2937",
++      red: isDark ? "#f87171" : "#b91c1c",
++      green: isDark ? "#4ade80" : "#15803d",
++      yellow: isDark ? "#facc15" : "#a16207",
++      blue: isDark ? "#60a5fa" : "#1d4ed8",
++      magenta: isDark ? "#c084fc" : "#7c3aed",
++      cyan: isDark ? "#22d3ee" : "#0f766e",
++      white: isDark ? "#e5e7eb" : "#e5e7eb",
++      brightBlack: isDark ? "#6b7280" : "#6b7280",
++      brightRed: isDark ? "#fca5a5" : "#dc2626",
++      brightGreen: isDark ? "#86efac" : "#16a34a",
++      brightYellow: isDark ? "#fde047" : "#ca8a04",
++      brightBlue: isDark ? "#93c5fd" : "#2563eb",
++      brightMagenta: isDark ? "#d8b4fe" : "#8b5cf6",
++      brightCyan: isDark ? "#67e8f9" : "#0891b2",
++      brightWhite: isDark ? "#f9fafb" : "#ffffff",
 +    };
 +  },
 +
@@ -1998,6 +1980,352 @@ index 0000000..3c9c4dc
 +};
 +
 +export const store = createStore("terminalModal", model);
+diff --git a/webui/components/modals/terminal/terminal.html b/webui/components/modals/terminal/terminal.html
+new file mode 100644
+index 0000000..1ec6d3f
+--- /dev/null
++++ b/webui/components/modals/terminal/terminal.html
+@@ -0,0 +1,189 @@
++<html>
++<head>
++  <title>Terminal</title>
++  <script type="module">
++    import { store as terminalStore } from "/components/modals/terminal/terminal-store.js";
++  </script>
++</head>
++<body>
++  <div
++    class="terminal-modal"
++    x-data
++    x-init="$store.terminalModal.attach()"
++    x-destroy="$store.terminalModal.detach()"
++  >
++    <div class="terminal-shell">
++      <div class="terminal-meta">
++        <div class="terminal-meta-text">
++          <span class="terminal-folder" x-text="$store.terminalModal.activeFolderPath || '$WORK_DIR'"></span>
++          <span class="terminal-log" x-text="$store.terminalModal.logPath || 'Starting terminal…'"></span>
++        </div>
++        <div class="terminal-actions">
++          <button
++            type="button"
++            class="btn-icon-action"
++            title="Clear terminal"
++            aria-label="Clear terminal"
++            @click="$store.terminalModal.clearOutput()"
++          >
++            <span class="material-symbols-outlined">ink_eraser</span>
++          </button>
++          <button
++            type="button"
++            class="btn-icon-action"
++            title="Restart session"
++            aria-label="Restart session"
++            @click="$store.terminalModal.resetSession()"
++          >
++            <span class="material-symbols-outlined">refresh</span>
++          </button>
++          <button
++            type="button"
++            class="btn-icon-action"
++            title="Kill session"
++            aria-label="Kill session"
++            @click="$store.terminalModal.killSession()"
++          >
++            <span class="material-symbols-outlined">close</span>
++          </button>
++          <button
++            type="button"
++            class="btn-icon-action"
++            title="Insert terminal log"
++            aria-label="Insert terminal log"
++            @click="$store.terminalModal.insertTerminalLog()"
++          >
++            <span class="material-symbols-outlined">article</span>
++          </button>
++        </div>
++      </div>
++      <p class="terminal-error" x-show="$store.terminalModal.error" x-text="$store.terminalModal.error"></p>
++      <div id="terminal-xterm" class="terminal-xterm"></div>
++    </div>
++  </div>
++
++  <style>
++    @import url("/vendor/xterm/xterm.css");
++
++    .terminal-modal {
++      --terminal-bg: var(--color-panel);
++      --terminal-fg: var(--color-text);
++      --terminal-cursor: var(--color-primary);
++      --terminal-selection: color-mix(in srgb, var(--color-primary) 18%, transparent);
++      display: flex;
++      flex-direction: column;
++      height: min(72vh, 52rem);
++      min-height: 28rem;
++      max-height: 72vh;
++      overscroll-behavior: contain;
++    }
++
++    body.light-mode .terminal-modal {
++      --terminal-bg: #f8fafc;
++      --terminal-fg: #0f172a;
++      --terminal-cursor: #2563eb;
++      --terminal-selection: rgba(37, 99, 235, 0.14);
++    }
++
++    body.dark-mode .terminal-modal {
++      --terminal-bg: #111827;
++      --terminal-fg: #e5e7eb;
++      --terminal-cursor: #7cc7ff;
++      --terminal-selection: rgba(124, 199, 255, 0.2);
++    }
++
++    .terminal-shell {
++      display: flex;
++      flex-direction: column;
++      height: 100%;
++      min-height: 0;
++      background: var(--color-background);
++      border: 1px solid var(--color-border);
++      border-radius: 8px;
++      overflow: hidden;
++      overscroll-behavior: contain;
++    }
++
++    .terminal-meta {
++      display: flex;
++      align-items: center;
++      justify-content: space-between;
++      gap: 1rem;
++      padding: 0.75rem 1rem;
++      border-bottom: 1px solid var(--color-border);
++      background: var(--color-background);
++      color: var(--color-text);
++      font-family: var(--font-family-code);
++      font-size: 0.75rem;
++    }
++
++    .terminal-meta-text {
++      display: flex;
++      flex-direction: column;
++      min-width: 0;
++      gap: 0.25rem;
++      flex: 1;
++    }
++
++    .terminal-folder {
++      color: var(--color-primary);
++      font-weight: 600;
++    }
++
++    .terminal-xterm {
++      flex: 1;
++      min-height: 0;
++      padding: 0;
++      background: var(--terminal-bg);
++      overflow: hidden;
++      overscroll-behavior: contain;
++    }
++
++    .terminal-xterm .xterm {
++      height: 100%;
++      padding: 0.75rem;
++    }
++
++    .terminal-xterm :is(.xterm-viewport, .xterm-screen) {
++      height: 100% !important;
++      border-radius: 4px;
++    }
++
++    .terminal-xterm .xterm-viewport {
++      background-color: var(--terminal-bg) !important;
++      overflow-y: auto !important;
++      overscroll-behavior: contain;
++    }
++
++    .terminal-xterm .xterm .composition-view {
++      background: var(--terminal-bg) !important;
++      color: var(--terminal-fg) !important;
++    }
++
++    .terminal-error {
++      margin: 0;
++      padding: 0.5rem 1rem;
++      color: var(--color-accent);
++      border-bottom: 1px solid var(--color-border);
++      background: var(--color-background-hover, var(--color-background));
++    }
++
++    .terminal-log {
++      overflow: hidden;
++      text-overflow: ellipsis;
++      white-space: nowrap;
++      color: var(--color-text-secondary, var(--color-text));
++    }
++
++    .terminal-actions {
++      display: flex;
++      align-items: center;
++      gap: 0.375rem;
++    }
++
++    .terminal-actions .material-symbols-outlined {
++      font-size: 1rem;
++    }
++  </style>
++</body>
++</html>
+diff --git a/webui/css/messages.css b/webui/css/messages.css
+index eb918ce..88b6083 100644
+--- a/webui/css/messages.css
++++ b/webui/css/messages.css
+@@ -259,6 +259,139 @@
+   background-color: transparent;
+ }
+ 
++.terminal-inline-container {
++  width: min(100%, 58rem);
++}
++
++.message-inline-terminal {
++  width: 100%;
++  opacity: 0.95;
++}
++
++.message-code-exe .inline-terminal-shell {
++  display: flex;
++  flex-direction: column;
++  gap: 0;
++}
++
++.inline-terminal-header {
++  display: flex;
++  align-items: center;
++  gap: var(--spacing-sm);
++  padding: 8px 12px;
++  border-bottom: 1px solid rgba(48, 54, 61, 0.8);
++  background: linear-gradient(180deg, #21262d 0%, #161b22 100%);
++}
++
++.inline-terminal-title {
++  font-family: var(--font-family-code);
++  font-size: 0.75rem;
++  color: #c9d1d9;
++}
++
++.inline-terminal-status {
++  font-size: 0.7rem;
++  color: #8b949e;
++}
++
++.inline-terminal-actions {
++  margin-left: auto;
++  display: flex;
++  gap: 2px;
++}
++
++.inline-terminal-action {
++  padding: 4px;
++  color: #8b949e;
++  background: transparent;
++}
++
++.inline-terminal-action:hover:not(:disabled) {
++  color: #c9d1d9;
++}
++
++.inline-terminal-output {
++  margin: 0;
++  min-height: 8rem;
++  max-height: 20rem;
++  overflow-y: auto;
++  padding: 12px;
++  font-family: var(--font-family-code);
++  font-size: 0.72rem;
++  line-height: 1.5;
++  color: #c9d1d9;
++  white-space: pre-wrap;
++  word-break: break-word;
++}
++
++.inline-terminal-form {
++  display: flex;
++  align-items: center;
++  gap: var(--spacing-xs);
++  padding: 10px 12px;
++  border-top: 1px solid rgba(48, 54, 61, 0.8);
++  background: rgba(13, 17, 23, 0.95);
++}
++
++.inline-terminal-prompt {
++  color: #7ee787;
++  font-family: var(--font-family-code);
++  font-size: 0.8rem;
++}
++
++.inline-terminal-input {
++  flex: 1;
++  border: none;
++  outline: none;
++  background: transparent;
++  color: #c9d1d9;
++  font-family: var(--font-family-code);
++  font-size: 0.75rem;
++}
++
++.inline-terminal-input::placeholder {
++  color: #6e7681;
++}
++
++.light-mode .inline-terminal-header {
++  background: linear-gradient(180deg, #f6f8fa 0%, #eaeef2 100%);
++  border-bottom-color: #d0d7de;
++}
++
++.light-mode .inline-terminal-title {
++  color: #24292f;
++}
++
++.light-mode .inline-terminal-status,
++.light-mode .inline-terminal-action {
++  color: #57606a;
++}
++
++.light-mode .inline-terminal-output {
++  color: #24292f;
++}
++
++.light-mode .inline-terminal-form {
++  background: rgba(246, 248, 250, 0.98);
++  border-top-color: #d0d7de;
++}
++
++.light-mode .inline-terminal-prompt {
++  color: #1a7f37;
++}
++
++.light-mode .inline-terminal-input {
++  color: #24292f;
++}
++
++.message-inline-terminal-log .inline-terminal-header {
++  border-bottom-style: dashed;
++}
++
++.inline-terminal-log-output {
++  max-height: 18rem;
++}
++
+ .message-util {
+   background-color: transparent;
+   display: none;
+@@ -771,4 +904,4 @@
+   to {
+     opacity: 0;
+   }
+-}
+\ No newline at end of file
++}
 diff --git a/webui/vendor/xterm/addon-fit.js b/webui/vendor/xterm/addon-fit.js
 new file mode 100644
 index 0000000..24d4f61

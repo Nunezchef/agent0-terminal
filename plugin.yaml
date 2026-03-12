@@ -1,9 +1,15 @@
+name: terminal0
 title: Agent0 Terminal
 description: PTY-backed terminal modal for Agent Zero with persistent sessions, TUI support, and TerminalLog integration.
+version: 1.0.0
 github: https://github.com/Nunezchef/agent0-terminal
 tags:
-  - development
+  - terminal
   - cli
   - tools
-  - files
   - workflow
+  - productivity
+settings_sections: []
+per_project_config: true
+per_agent_config: false
+always_enabled: false

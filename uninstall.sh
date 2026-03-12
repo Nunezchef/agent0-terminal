@@ -2,11 +2,11 @@
 set -euo pipefail
 
 log() {
-  printf '[agent0-terminal] %s\n' "$*"
+  printf '[terminal0] %s\n' "$*"
 }
 
 die() {
-  printf '[agent0-terminal] ERROR: %s\n' "$*" >&2
+  printf '[terminal0] ERROR: %s\n' "$*" >&2
   exit 1
 }
 
@@ -28,7 +28,7 @@ main() {
 
   local backup_file="${1:-}"
   if [ -z "${backup_file}" ]; then
-    backup_file="$(find "${root}/.agent0-terminal/backups" -maxdepth 1 -type f -name '*.patch' 2>/dev/null | sort | tail -1 || true)"
+    backup_file="$(find "${root}/.terminal0/backups" -maxdepth 1 -type f -name '*.patch' 2>/dev/null | sort | tail -1 || true)"
   fi
 
   [ -n "${backup_file}" ] || die "No backup patch found. Provide a patch path explicitly."
@@ -36,6 +36,11 @@ main() {
 
   git -C "${root}" apply -R "${backup_file}" || die "Rollback patch failed"
   log "Rollback applied from ${backup_file}"
+
+  rm -rf "${root}/usr/plugins/terminal0" 2>/dev/null || true
+  rm -f "${root}/plugins/terminal0" 2>/dev/null || true
+  log "Removed plugin files from ${root}/usr/plugins/terminal0 and ${root}/plugins/terminal0"
+
   printf '\n'
   printf 'HARD RESTART REQUIRED\n'
   printf 'Fully restart the Agent Zero backend now. A browser refresh alone is not enough.\n'

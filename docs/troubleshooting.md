@@ -1,66 +1,36 @@
 # Troubleshooting
 
-## The Installer Cannot Find Agent Zero
+## Installer cannot find Agent Zero root
 
-Set the target explicitly:
+Pass it explicitly:
 
 ```bash
-A0_ROOT=/a0 curl -fsSL https://raw.githubusercontent.com/Nunezchef/agent0-terminal/main/install.sh | bash
+bash install.sh /a0
 ```
 
-## The Patch Does Not Apply
+## Plugin installed but terminal behavior did not change
 
-This usually means your Agent Zero checkout differs from the expected baseline.
+You must restart Agent Zero backend after install.
 
-- inspect the `git apply --check` failure
-- resolve local changes in the same files
-- apply the patch manually if needed
+Browser refresh alone is not enough.
 
-## The UI Refreshes But The Terminal Still Behaves Like Old Code
+## `initialize.py` fails with missing runtime file
 
-You need a full backend restart.
+Your plugin copy is incomplete. Re-clone this repository and run `install.sh` again.
 
-Browser refresh alone does not reload Python websocket handlers or API modules.
+## Terminal still has wrong colors in light mode
 
-## Terminal Scroll Feels Janky On Safari Or iPad
+- Verify Agent Zero dark mode is actually set to light.
+- Close and reopen the terminal modal.
+- Hard refresh browser assets.
 
-The terminal modal uses nested scroll containment, and Safari can still make that feel rough even when the terminal works correctly.
+## Safari/iPad scroll still feels rough
 
-What you may notice:
-
-- scrolling inside the terminal can feel less smooth than desktop browsers
-- iPad Safari may still feel awkward with pointer or touch input inside the terminal viewport
-
-Current status:
-
-- this is a known limitation of the current release
-- the terminal is still usable
-- the issue is documented so contributors can improve it later
-
-Current workaround:
-
-- use the terminal as-is for now
-- if possible, use a desktop Chromium-based browser for the smoothest current experience
-
-## Terminal Colors Do Not Match Light Mode
-
-The terminal is designed to follow Agent Zero's dark-mode preference automatically.
-
-If the app is in light mode but the terminal still looks stale:
-
-- close and reopen the terminal modal
-- refresh the browser so the latest frontend assets load
-- confirm the Agent Zero dark-mode preference is actually set the way you expect
-
-Current expected behavior:
-
-- dark mode uses a dark terminal palette
-- light mode uses a light terminal palette
+Known limitation. Terminal remains usable, but nested scrolling is less smooth than Chromium.
 
 ## Rollback
 
-Use the saved backup patch:
-
 ```bash
-git -C /a0 apply -R /a0/.agent0-terminal/backups/<timestamp>.patch
+LATEST_BACKUP="$(find /a0/.terminal0/backups -maxdepth 1 -name '*.patch' | sort | tail -1)"
+git -C /a0 apply -R "$LATEST_BACKUP"
 ```

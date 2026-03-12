@@ -1,0 +1,189 @@
+<html>
+<head>
+  <title>Terminal</title>
+  <script type="module">
+    import { store as terminalStore } from "/components/modals/terminal/terminal-store.js";
+  </script>
+</head>
+<body>
+  <div
+    class="terminal-modal"
+    x-data
+    x-init="$store.terminalModal.attach()"
+    x-destroy="$store.terminalModal.detach()"
+  >
+    <div class="terminal-shell">
+      <div class="terminal-meta">
+        <div class="terminal-meta-text">
+          <span class="terminal-folder" x-text="$store.terminalModal.activeFolderPath || '$WORK_DIR'"></span>
+          <span class="terminal-log" x-text="$store.terminalModal.logPath || 'Starting terminal…'"></span>
+        </div>
+        <div class="terminal-actions">
+          <button
+            type="button"
+            class="btn-icon-action"
+            title="Clear terminal"
+            aria-label="Clear terminal"
+            @click="$store.terminalModal.clearOutput()"
+          >
+            <span class="material-symbols-outlined">ink_eraser</span>
+          </button>
+          <button
+            type="button"
+            class="btn-icon-action"
+            title="Restart session"
+            aria-label="Restart session"
+            @click="$store.terminalModal.resetSession()"
+          >
+            <span class="material-symbols-outlined">refresh</span>
+          </button>
+          <button
+            type="button"
+            class="btn-icon-action"
+            title="Kill session"
+            aria-label="Kill session"
+            @click="$store.terminalModal.killSession()"
+          >
+            <span class="material-symbols-outlined">close</span>
+          </button>
+          <button
+            type="button"
+            class="btn-icon-action"
+            title="Insert terminal log"
+            aria-label="Insert terminal log"
+            @click="$store.terminalModal.insertTerminalLog()"
+          >
+            <span class="material-symbols-outlined">article</span>
+          </button>
+        </div>
+      </div>
+      <p class="terminal-error" x-show="$store.terminalModal.error" x-text="$store.terminalModal.error"></p>
+      <div id="terminal-xterm" class="terminal-xterm"></div>
+    </div>
+  </div>
+
+  <style>
+    @import url("/vendor/xterm/xterm.css");
+
+    .terminal-modal {
+      --terminal-bg: var(--color-panel);
+      --terminal-fg: var(--color-text);
+      --terminal-cursor: var(--color-primary);
+      --terminal-selection: color-mix(in srgb, var(--color-primary) 18%, transparent);
+      display: flex;
+      flex-direction: column;
+      height: min(72vh, 52rem);
+      min-height: 28rem;
+      max-height: 72vh;
+      overscroll-behavior: contain;
+    }
+
+    body.light-mode .terminal-modal {
+      --terminal-bg: #f8fafc;
+      --terminal-fg: #0f172a;
+      --terminal-cursor: #2563eb;
+      --terminal-selection: rgba(37, 99, 235, 0.14);
+    }
+
+    body.dark-mode .terminal-modal {
+      --terminal-bg: #111827;
+      --terminal-fg: #e5e7eb;
+      --terminal-cursor: #7cc7ff;
+      --terminal-selection: rgba(124, 199, 255, 0.2);
+    }
+
+    .terminal-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      background: var(--color-background);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      overflow: hidden;
+      overscroll-behavior: contain;
+    }
+
+    .terminal-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-background);
+      color: var(--color-text);
+      font-family: var(--font-family-code);
+      font-size: 0.75rem;
+    }
+
+    .terminal-meta-text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      gap: 0.25rem;
+      flex: 1;
+    }
+
+    .terminal-folder {
+      color: var(--color-primary);
+      font-weight: 600;
+    }
+
+    .terminal-xterm {
+      flex: 1;
+      min-height: 0;
+      padding: 0;
+      background: var(--terminal-bg);
+      overflow: hidden;
+      overscroll-behavior: contain;
+    }
+
+    .terminal-xterm .xterm {
+      height: 100%;
+      padding: 0.75rem;
+    }
+
+    .terminal-xterm :is(.xterm-viewport, .xterm-screen) {
+      height: 100% !important;
+      border-radius: 4px;
+    }
+
+    .terminal-xterm .xterm-viewport {
+      background-color: var(--terminal-bg) !important;
+      overflow-y: auto !important;
+      overscroll-behavior: contain;
+    }
+
+    .terminal-xterm .xterm .composition-view {
+      background: var(--terminal-bg) !important;
+      color: var(--terminal-fg) !important;
+    }
+
+    .terminal-error {
+      margin: 0;
+      padding: 0.5rem 1rem;
+      color: var(--color-accent);
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-background-hover, var(--color-background));
+    }
+
+    .terminal-log {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--color-text-secondary, var(--color-text));
+    }
+
+    .terminal-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    .terminal-actions .material-symbols-outlined {
+      font-size: 1rem;
+    }
+  </style>
+</body>
+</html>

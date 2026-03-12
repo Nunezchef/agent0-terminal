@@ -1,36 +1,46 @@
 # Manual Install
 
-If you do not want to use the one-line installer, use the patch directly.
+If you do not want to run `install.sh`, do the plugin install manually.
 
-## 1. Verify The Target
+## 1. Choose Agent Zero root
+
+Example:
 
 ```bash
-scripts/verify-target.sh /a0
+export A0_ROOT=/a0
 ```
 
-## 2. Create A Backup Patch
+## 2. Copy plugin into `usr/plugins`
 
 ```bash
-scripts/backup-target.sh /a0
+mkdir -p "$A0_ROOT/usr/plugins/terminal0"
+cp -f plugin.yaml README.md hooks.md install.sh uninstall.sh initialize.py LICENSE "$A0_ROOT/usr/plugins/terminal0/"
+mkdir -p "$A0_ROOT/usr/plugins/terminal0/runtime" "$A0_ROOT/usr/plugins/terminal0/scripts"
+cp -rf runtime/* "$A0_ROOT/usr/plugins/terminal0/runtime/"
+cp -f scripts/install-into-agent0.sh "$A0_ROOT/usr/plugins/terminal0/scripts/"
 ```
 
-## 3. Apply The Patch
+## 3. Run initializer
 
 ```bash
-git -C /a0 apply --check patches/agent0-terminal.patch
-git -C /a0 apply patches/agent0-terminal.patch
+python3 "$A0_ROOT/usr/plugins/terminal0/initialize.py" --a0-root "$A0_ROOT" --plugin-root "$A0_ROOT/usr/plugins/terminal0"
 ```
 
-## 4. Restart Agent Zero
-
-You must fully restart the Agent Zero backend after applying the patch.
-
-Browser refresh alone is not enough for backend and websocket changes.
-
-## 5. Roll Back If Needed
-
-Use the backup patch printed by the installer:
+## 4. Enable plugin + symlink
 
 ```bash
-git -C /a0 apply -R /a0/.agent0-terminal/backups/<timestamp>.patch
+touch "$A0_ROOT/usr/plugins/terminal0/.toggle-1"
+mkdir -p "$A0_ROOT/plugins"
+ln -sfn "$A0_ROOT/usr/plugins/terminal0" "$A0_ROOT/plugins/terminal0"
+```
+
+## 5. Restart Agent Zero
+
+A full backend restart is required.
+
+## Rollback
+
+```bash
+LATEST_BACKUP="$(find "$A0_ROOT/.terminal0/backups" -maxdepth 1 -name '*.patch' | sort | tail -1)"
+git -C "$A0_ROOT" apply -R "$LATEST_BACKUP"
 ```

@@ -7,22 +7,23 @@ Source index:
 
 Relevant index rules:
 - Add exactly one new folder under `plugins/<your-plugin-name>/`
-- Include only `plugin.yaml` and an optional square `thumbnail.*`
+- Include only `index.yaml` and an optional square `thumbnail.*`
 - The plugin repository must contain `plugin.yaml` at its root
+- The index folder name must match the remote `plugin.yaml` `name` field
 
 ## Proposed PR Title
 
 ```text
-Add Agent0 Terminal plugin
+Add terminal0 plugin
 ```
 
 ## Files To Add In The `a0-plugins` PR
 
 ```text
-plugins/agent0-terminal/plugin.yaml
+plugins/terminal0/index.yaml
 ```
 
-## `plugins/agent0-terminal/plugin.yaml`
+## `plugins/terminal0/index.yaml`
 
 ```yaml
 title: Agent0 Terminal
@@ -44,13 +45,13 @@ This PR adds `agent0-terminal` to the Agent Zero plugin index.
 Plugin repo:
 https://github.com/Nunezchef/agent0-terminal
 
-`agent0-terminal` is a standalone add-on for Agent Zero that adds a real PTY-backed terminal modal with persistent sessions, TUI support, and explicit `TerminalLog` integration.
+`terminal0` is a plugin-packaged terminal integration for Agent Zero that adds a real PTY-backed modal terminal with persistent sessions, TUI support, and explicit `TerminalLog` integration.
 
-The plugin repository includes the required root `plugin.yaml`, and this PR adds exactly one plugin folder under `plugins/agent0-terminal/`.
+The plugin repository includes the required root `plugin.yaml` (`name: terminal0`), and this PR adds exactly one plugin folder under `plugins/terminal0/` with `index.yaml`.
 ```
 
 ## Notes
 
 - No thumbnail is included in the first submission.
-- The current distribution model is patch-based: users install the add-on into an existing Agent Zero checkout.
-- This is plugin-indexable now, even though installation is still a patch workflow rather than a one-click in-app install.
+- The current distribution model is plugin-packaged runtime install into Agent Zero core paths.
+- The plugin is installable from repository + installer and indexable in marketplace.

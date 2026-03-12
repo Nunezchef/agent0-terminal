@@ -2,11 +2,25 @@
 
 True plugin packaging for Agent Zero that installs a seamless PTY-backed terminal modal into chat.
 
+## Version 0.1.1
+
+This release improves mobile terminal usability and keeps parity with the latest Agent0 UI integration.
+
+### What changed in `v0.1.1`
+
+- Added a mobile key tray toggle (phone icon) directly in terminal modal actions.
+- Added special key buttons for `↑`, `↓`, `←`, `→`, `Tab`, `Esc`, `Ctrl+C`, `Space`, and `Enter`.
+- Mobile key tray now toggles closed when the phone icon is clicked again.
+- Updated runtime wiring so special keys are sent to the active terminal session via `terminal_input`.
+- Kept light/dark theme alignment with Agent Zero preferences.
+- Maintained terminal log insertion flow (`TerminalLog`) in the native Agent Zero process stream.
+
 ## What this plugin provides
 
 - Real terminal modal inside Agent Zero chat
 - Persistent sessions keyed by chat + folder
 - TUI-friendly behavior (`xterm-256color`, resize sync)
+- Mobile key tray for phone/tablet workflows
 - Terminal log capture per chat
 - `TerminalLog` insertion into native Agent Zero process stream
 - Light/dark theme sync with Agent Zero preferences

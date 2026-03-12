@@ -49,6 +49,15 @@
           <button
             type="button"
             class="btn-icon-action"
+            title="Mobile keys"
+            aria-label="Mobile keys"
+            @click="$store.terminalModal.toggleMobileKeys()"
+          >
+            <span class="material-symbols-outlined">smartphone</span>
+          </button>
+          <button
+            type="button"
+            class="btn-icon-action"
             title="Insert terminal log"
             aria-label="Insert terminal log"
             @click="$store.terminalModal.insertTerminalLog()"
@@ -58,6 +67,80 @@
         </div>
       </div>
       <p class="terminal-error" x-show="$store.terminalModal.error" x-text="$store.terminalModal.error"></p>
+      <div class="terminal-mobile-keys" x-show="$store.terminalModal.mobileKeysOpen">
+        <button
+          type="button"
+          class="terminal-mobile-key"
+          :disabled="!$store.terminalModal.sessionActive"
+          @click="$store.terminalModal.sendSpecialKey('arrow_up')"
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          class="terminal-mobile-key"
+          :disabled="!$store.terminalModal.sessionActive"
+          @click="$store.terminalModal.sendSpecialKey('arrow_down')"
+        >
+          ↓
+        </button>
+        <button
+          type="button"
+          class="terminal-mobile-key"
+          :disabled="!$store.terminalModal.sessionActive"
+          @click="$store.terminalModal.sendSpecialKey('arrow_left')"
+        >
+          ←
+        </button>
+        <button
+          type="button"
+          class="terminal-mobile-key"
+          :disabled="!$store.terminalModal.sessionActive"
+          @click="$store.terminalModal.sendSpecialKey('arrow_right')"
+        >
+          →
+        </button>
+        <button
+          type="button"
+          class="terminal-mobile-key terminal-mobile-key-wide"
+          :disabled="!$store.terminalModal.sessionActive"
+          @click="$store.terminalModal.sendSpecialKey('tab')"
+        >
+          Tab
+        </button>
+        <button
+          type="button"
+          class="terminal-mobile-key terminal-mobile-key-wide"
+          :disabled="!$store.terminalModal.sessionActive"
+          @click="$store.terminalModal.sendSpecialKey('esc')"
+        >
+          Esc
+        </button>
+        <button
+          type="button"
+          class="terminal-mobile-key terminal-mobile-key-wide"
+          :disabled="!$store.terminalModal.sessionActive"
+          @click="$store.terminalModal.sendSpecialKey('ctrl_c')"
+        >
+          Ctrl+C
+        </button>
+        <button
+          type="button"
+          class="terminal-mobile-key terminal-mobile-key-space"
+          :disabled="!$store.terminalModal.sessionActive"
+          @click="$store.terminalModal.sendSpecialKey('space')"
+        >
+          Space
+        </button>
+        <button
+          type="button"
+          class="terminal-mobile-key terminal-mobile-key-wide terminal-mobile-key-enter"
+          :disabled="!$store.terminalModal.sessionActive"
+          @click="$store.terminalModal.sendSpecialKey('enter')"
+        >
+          Enter
+        </button>
+      </div>
       <div id="terminal-xterm" class="terminal-xterm"></div>
     </div>
   </div>
@@ -183,6 +266,52 @@
 
     .terminal-actions .material-symbols-outlined {
       font-size: 1rem;
+    }
+
+    .terminal-mobile-keys {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.375rem;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-background);
+    }
+
+    .terminal-mobile-key {
+      min-width: 2.1rem;
+      min-height: 2rem;
+      border: 1px solid var(--color-border);
+      border-radius: 0.5rem;
+      background: var(--color-background);
+      color: var(--color-text);
+      font-family: var(--font-family-code);
+      font-size: 0.78rem;
+      line-height: 1;
+      padding: 0.3rem 0.5rem;
+      cursor: pointer;
+    }
+
+    .terminal-mobile-key:hover {
+      background: var(--color-background-hover, color-mix(in srgb, var(--color-background) 88%, #000 12%));
+    }
+
+    .terminal-mobile-key:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .terminal-mobile-key-wide {
+      min-width: 3.25rem;
+    }
+
+    .terminal-mobile-key-space {
+      flex: 1;
+      min-width: 6rem;
+    }
+
+    .terminal-mobile-key-enter {
+      min-width: 4.2rem;
+      margin-left: auto;
     }
   </style>
 </body>

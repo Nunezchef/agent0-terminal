@@ -35,6 +35,7 @@ const model = {
   resizeTimer: null,
   xtermReady: null,
   sessionActive: false,
+  mobileKeysOpen: false,
 
   prepare({ ctxid, folderPath }) {
     this.activeContextId = ctxid || "";
@@ -42,6 +43,7 @@ const model = {
     this.logPath = "";
     this.error = null;
     this.sessionActive = false;
+    this.mobileKeysOpen = false;
     this.pageScrollLocked = false;
   },
 
@@ -80,6 +82,7 @@ const model = {
     this.socketClient = null;
     this.logPath = "";
     this.sessionActive = false;
+    this.mobileKeysOpen = false;
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
@@ -551,6 +554,34 @@ const model = {
         globalThis.toastFetchError("Error inserting terminal log", error);
       }
     }
+  },
+
+  toggleMobileKeys() {
+    this.mobileKeysOpen = !this.mobileKeysOpen;
+    this.focusTerminal();
+  },
+
+  sendSpecialKey(key) {
+    if (!this.sessionActive || !this.socketClient?.isConnected()) return;
+
+    const keyMap = {
+      arrow_up: "\x1b[A",
+      arrow_down: "\x1b[B",
+      arrow_left: "\x1b[D",
+      arrow_right: "\x1b[C",
+      enter: "\r",
+      space: " ",
+      tab: "\t",
+      esc: "\x1b",
+      ctrl_c: "\x03",
+    };
+
+    const input = keyMap[String(key)];
+    if (!input) return;
+    this.socketClient.emit("terminal_input", { input }).catch((error) => {
+      console.error("Terminal special key error", error);
+    });
+    this.focusTerminal();
   },
 };
 
